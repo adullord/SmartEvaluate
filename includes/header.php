@@ -54,6 +54,9 @@
                     <?php if ($_SESSION['role'] === 'admin'): ?>
                         <div class="nav-divider"></div>
                         <div class="nav-header">การจัดการระบบ</div>
+                        <a href="<?= htmlspecialchars(appUrl('admin/database_schema.php')) ?>" class="nav-item">
+                            <span class="nav-icon"><?= appIcon('settings') ?></span> <span class="nav-text">ปรับโครงสร้างฐานข้อมูล</span>
+                        </a>
                         <a href="<?= htmlspecialchars(appUrl('admin/index.php')) ?>" class="nav-item">
                             <span class="nav-icon"><?= appIcon('settings') ?></span> <span class="nav-text">เมนูผู้ดูแลระบบ</span>
                         </a>
