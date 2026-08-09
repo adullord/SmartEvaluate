@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/../csrf_helper.php'; ?>
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -38,6 +39,18 @@
                         <span class="nav-icon"><?= appIcon('bar-chart') ?></span> <span class="nav-text">รายงานผล</span>
                     </a>
                     
+                    <a href="<?= htmlspecialchars(appUrl('kpi_results.php')) ?>" class="nav-item">
+                        <span class="nav-icon"><?= appIcon('activity') ?></span> <span class="nav-text">ตัวชี้วัดผลสัมฤทธิ์</span>
+                    </a>
+                    <?php if (in_array($_SESSION['role'] ?? '', ['admin', 'ss_amphoe', 'director'], true)): ?>
+                        <a href="<?= htmlspecialchars(appUrl('kpi_assignments.php')) ?>" class="nav-item">
+                            <span class="nav-icon"><?= appIcon('link') ?></span> <span class="nav-text">กำหนดผู้รับผิดชอบตัวชี้วัด</span>
+                        </a>
+                        <a href="<?= htmlspecialchars(appUrl('kpi_report.php')) ?>" class="nav-item">
+                            <span class="nav-icon"><?= appIcon('file-text') ?></span> <span class="nav-text">รายงานตัวชี้วัด</span>
+                        </a>
+                    <?php endif; ?>
+
                     <?php if ($_SESSION['role'] === 'admin'): ?>
                         <div class="nav-divider"></div>
                         <div class="nav-header">การจัดการระบบ</div>
@@ -48,9 +61,12 @@
                 </nav>
 
                 <div class="sidebar-footer">
-                    <a href="<?= htmlspecialchars(appUrl('logout.php')) ?>" class="nav-item nav-logout">
+                    <form method="post" action="<?= htmlspecialchars(appUrl('logout.php')) ?>" style="margin:0">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
+                    <button type="submit" class="nav-item nav-logout" style="width:100%;border:0;background:transparent;text-align:left;cursor:pointer;font:inherit">
                         <span class="nav-icon"><?= appIcon('log-out') ?></span> <span class="nav-text">ออกจากระบบ</span>
-                    </a>
+                    </button>
+                    </form>
                 </div>
             <?php else: ?>
                 <nav class="sidebar-nav-menu">

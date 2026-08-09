@@ -22,7 +22,9 @@ function loadEvaluationExportData(PDO $pdo, int $evaluationId, int $userId, stri
     if (!$evaluation) {
         throw new RuntimeException('ไม่พบข้อมูลการประเมิน');
     }
-    if ($userRole !== 'admin' && (int)$evaluation['evaluator_id'] !== $userId) {
+    $canExportAssigned = in_array($userRole, ['ss_amphoe', 'director'], true)
+        && (int)$evaluation['evaluator_id'] === $userId;
+    if ($userRole !== 'admin' && !$canExportAssigned) {
         throw new RuntimeException('เฉพาะแอดมินหรือผู้ประเมินของรายการนี้เท่านั้นที่ส่งออกรายงานได้');
     }
 

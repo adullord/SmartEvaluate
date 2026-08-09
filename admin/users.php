@@ -1,6 +1,6 @@
 <?php
-session_start();
 require_once '../config.php';
+require_once '../csrf_helper.php';
 require_once 'users_import_helper.php';
 require_once '../includes/user_role_helper.php';
 require_once '../includes/expected_level_helper.php';
@@ -14,11 +14,16 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 $message = '';
 $error = '';
 $importErrors = [];
+$csrfToken = generate_csrf_token();
 
 // Handle POST actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verify_csrf_token((string)($_POST['csrf_token'] ?? ''))) {
+        http_response_code(403);
+        die('คำขอหมดอายุ กรุณารีเฟรชหน้าแล้วลองใหม่อีกครั้ง');
+    }
     $action = $_POST['action'] ?? '';
-    $target_id = $_POST['target_id'] ?? 0;
+    $target_id = requestInt($_POST['target_id'] ?? null, 'target_id', 0, 0);
     
     if ($action === 'import_users') {
         try {
@@ -34,8 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'reset_password' && $target_id) {
         $new_password = $_POST['new_password'] ?? '';
-        if (strlen($new_password) < 4) {
-            $error = 'รหัสผ่านต้องมีความยาวอย่างน้อย 4 ตัวอักษร';
+        if (strlen($new_password) < 12 || strlen($new_password) > 255) {
+            $error = 'รหัสผ่านต้องมีความยาว 12–255 ตัวอักษร';
         } else {
             $hashed = password_hash($new_password, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
@@ -60,9 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'กรุณากรอกข้อมูลบุคลากรให้ครบถ้วน';
         } else {
             try {
-                $expectedLevel = expectedLevelFromIds($pdo, (int)$_POST['position_id'], (int)$_POST['rank_id']);
+                $departmentId = requestInt($_POST['department_id'] ?? null, 'department_id');
+                $positionId = requestInt($_POST['position_id'] ?? null, 'position_id');
+                $rankId = requestInt($_POST['rank_id'] ?? null, 'rank_id');
+                $expectedLevel = expectedLevelFromIds($pdo, $positionId, $rankId);
                 $stmt = $pdo->prepare('UPDATE users SET username=?, fullname=?, role=?, department_id=?, position_id=?, rank_id=?, expected_level=? WHERE id=?');
-                $stmt->execute([$username,$fullname,$role,(int)$_POST['department_id'],(int)$_POST['position_id'],(int)$_POST['rank_id'],$expectedLevel,(int)$target_id]);
+                $stmt->execute([$username,$fullname,$role,$departmentId,$positionId,$rankId,$expectedLevel,$target_id]);
                 syncUserRoles($pdo, (int)$target_id, $role);
                 $message = 'แก้ไขข้อมูลบุคลากรเรียบร้อย';
             } catch (Throwable $e) {
@@ -73,13 +81,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = $_POST['username'] ?? '';
         $fullname = $_POST['fullname'] ?? '';
         $role = $_POST['role'] ?? 'staff';
-        $department_id = $_POST['department_id'] ?? 0;
-        $position_id = $_POST['position_id'] ?? 0;
-        $rank_id = $_POST['rank_id'] ?? 0;
+        $department_id = requestInt($_POST['department_id'] ?? null, 'department_id');
+        $position_id = requestInt($_POST['position_id'] ?? null, 'position_id');
+        $rank_id = requestInt($_POST['rank_id'] ?? null, 'rank_id');
         $password = $_POST['password'] ?? '';
         
-        if (strlen($username) < 4 || strlen($password) < 4 || trim($fullname) === '' || !in_array($role, ['admin','ss_amphoe','director','staff'], true)) {
-            $error = 'ชื่อผู้ใช้และรหัสผ่านต้องมีความยาวอย่างน้อย 4 ตัวอักษร';
+        if (strlen($username) < 4 || strlen($username) > 13 || strlen($password) < 12 || strlen($password) > 255 || trim($fullname) === '' || !in_array($role, ['admin','ss_amphoe','director','staff'], true)) {
+            $error = 'ชื่อผู้ใช้ต้องยาว 4–13 ตัวอักษร และรหัสผ่านต้องยาว 12–255 ตัวอักษร';
         } else {
             // Check if username exists
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
@@ -105,18 +113,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch users
-$stmt = $pdo->query("
+// Search and server-side pagination (DataTable-like)
+$searchInput = $_GET['q'] ?? '';
+if (is_array($searchInput)) { http_response_code(400); exit('พารามิเตอร์ค้นหาไม่ถูกต้อง'); }
+$search = mb_substr(trim((string)$searchInput), 0, 100);
+$perPageOptions = [10, 25, 50, 100];
+$perPage = requestInt($_GET['per_page'] ?? null, 'per_page', 25, 1, 100);
+if (!in_array($perPage, $perPageOptions, true)) $perPage = 25;
+$page = requestInt($_GET['page'] ?? null, 'page', 1, 1, 1000000);
+
+$fromSql = "
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    LEFT JOIN positions p ON u.position_id = p.id
+    LEFT JOIN ranks r ON u.rank_id = r.id
+";
+$whereSql = '';
+$queryParams = [];
+if ($search !== '') {
+    $whereSql = "
+        WHERE u.username LIKE ?
+           OR u.fullname LIKE ?
+           OR d.name LIKE ?
+           OR d.short_name LIKE ?
+           OR d.service_code LIKE ?
+           OR p.name LIKE ?
+           OR r.name LIKE ?
+           OR u.role LIKE ?
+    ";
+    $term = '%' . $search . '%';
+    $queryParams = array_fill(0, 8, $term);
+}
+
+$countStmt = $pdo->prepare('SELECT COUNT(*) ' . $fromSql . $whereSql);
+$countStmt->execute($queryParams);
+$totalUsers = (int)$countStmt->fetchColumn();
+$totalPages = max(1, (int)ceil($totalUsers / $perPage));
+$page = min($page, $totalPages);
+$offset = ($page - 1) * $perPage;
+
+$stmt = $pdo->prepare("
     SELECT u.*, COALESCE(NULLIF(d.short_name, ''), d.name) as dept_name, p.name as pos_name, r.name as rank_name,
       (SELECT GROUP_CONCAT(rr.name ORDER BY rr.id SEPARATOR ', ')
        FROM user_roles ur JOIN roles rr ON rr.id = ur.role_id WHERE ur.user_id = u.id) AS role_names
-    FROM users u 
-    LEFT JOIN departments d ON u.department_id = d.id 
-    LEFT JOIN positions p ON u.position_id = p.id 
-    LEFT JOIN ranks r ON u.rank_id = r.id 
+    {$fromSql}
+    {$whereSql}
     ORDER BY d.id, u.role, u.fullname
+    LIMIT ? OFFSET ?
 ");
+$bindIndex = 1;
+foreach ($queryParams as $param) $stmt->bindValue($bindIndex++, $param, PDO::PARAM_STR);
+$stmt->bindValue($bindIndex++, $perPage, PDO::PARAM_INT);
+$stmt->bindValue($bindIndex, $offset, PDO::PARAM_INT);
+$stmt->execute();
 $users = $stmt->fetchAll();
+
+$rangeStart = $totalUsers > 0 ? $offset + 1 : 0;
+$rangeEnd = min($offset + $perPage, $totalUsers);
+$pageUrl = static function (int $targetPage) use ($search, $perPage): string {
+    return '?' . http_build_query(['q' => $search, 'per_page' => $perPage, 'page' => $targetPage]);
+};
 
 // Fetch options for forms
 $departments = $pdo->query("SELECT * FROM departments ORDER BY FIELD(type, 'SSO', 'RPST'), service_code")->fetchAll();
@@ -172,6 +228,7 @@ require_once '../includes/header.php';
             </a>
         </div>
         <form method="post" enctype="multipart/form-data" class="admin-inline-form" style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
             <input type="hidden" name="action" value="import_users">
             <div class="form-group" style="margin:0;flex:1;min-width:260px">
                 <label for="users_file">ไฟล์ Excel (.xlsx หรือ .xls)</label>
@@ -184,11 +241,29 @@ require_once '../includes/header.php';
         <small style="display:block;color:var(--text-muted);margin-top:.75rem">หากพบข้อมูลผิด ระบบจะไม่บันทึกทั้งไฟล์ และจะแจ้งเลขแถวให้แก้ไข</small>
     </div>
 
+    <form method="get" class="admin-inline-form" style="display:flex;gap:.75rem;align-items:end;justify-content:space-between;flex-wrap:wrap;margin-bottom:1rem;padding:1rem;background:var(--bg-hover);border-radius:12px">
+        <div style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap;flex:1">
+            <div class="form-group" style="margin:0;min-width:280px;flex:1">
+                <label for="userSearch">ค้นหารายชื่อ</label>
+                <input class="form-control" type="search" id="userSearch" name="q" value="<?= htmlspecialchars($search) ?>" placeholder="ชื่อผู้ใช้ ชื่อบุคลากร หน่วยบริการ ตำแหน่ง...">
+            </div>
+            <div class="form-group" style="margin:0;width:120px">
+                <label for="perPage">แสดง</label>
+                <select class="form-control" id="perPage" name="per_page" onchange="this.form.submit()">
+                    <?php foreach ($perPageOptions as $option): ?><option value="<?= $option ?>" <?= $perPage === $option ? 'selected' : '' ?>><?= $option ?> แถว</option><?php endforeach; ?>
+                </select>
+            </div>
+            <button class="btn btn-primary" type="submit"><?= appIcon('search') ?> ค้นหา</button>
+            <?php if ($search !== ''): ?><a class="btn btn-secondary" href="?per_page=<?= $perPage ?>"><?= appIcon('x-circle') ?> ล้างค้นหา</a><?php endif; ?>
+        </div>
+        <div style="color:var(--text-muted);white-space:nowrap">แสดง <?= number_format($rangeStart) ?>–<?= number_format($rangeEnd) ?> จาก <?= number_format($totalUsers) ?> รายการ</div>
+    </form>
+
     <div style="overflow-x: auto;">
         <table class="table" style="width: 100%; text-align: left; border-collapse: collapse;">
             <thead>
                 <tr style="background-color: var(--primary-50);">
-                    <th>ID</th>
+                    <th style="width:70px;text-align:center">ลำดับ</th>
                     <th>ชื่อผู้ใช้งาน</th>
                     <th>ชื่อ-นามสกุล</th>
                     <th>หน่วยบริการ</th>
@@ -199,9 +274,9 @@ require_once '../includes/header.php';
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($users as $u): ?>
+                <?php foreach ($users as $rowIndex => $u): ?>
                 <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td><?= $u['id'] ?></td>
+                    <td style="text-align:center"><?= number_format($offset + $rowIndex + 1) ?></td>
                     <td><strong><?= htmlspecialchars($u['username']) ?></strong></td>
                     <td><?= htmlspecialchars($u['fullname']) ?></td>
                     <td><?= htmlspecialchars($u['dept_name']) ?></td>
@@ -220,6 +295,7 @@ require_once '../includes/header.php';
                             <?= appIcon('key') ?> รีเซ็ตรหัส
                         </button>
                         <form method="POST" style="display: inline-block;" onsubmit="return confirm('ยืนยันการเปลี่ยนสถานะผู้ใช้นี้?');">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                             <input type="hidden" name="action" value="toggle_status">
                             <input type="hidden" name="target_id" value="<?= $u['id'] ?>">
                             <button type="submit" class="btn btn-sm <?= $u['is_active'] ? 'btn-danger' : 'btn-success' ?>">
@@ -229,9 +305,29 @@ require_once '../includes/header.php';
                     </td>
                 </tr>
                 <?php endforeach; ?>
+                <?php if (!$users): ?>
+                <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)"><?= appIcon('inbox') ?> ไม่พบรายชื่อที่ตรงกับคำค้นหา</td></tr>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>
+
+    <?php if ($totalPages > 1): ?>
+    <nav aria-label="แบ่งหน้ารายชื่อบุคลากร" style="display:flex;justify-content:center;align-items:center;gap:.35rem;flex-wrap:wrap;margin-top:1.25rem">
+        <a class="btn btn-secondary btn-sm" href="<?= htmlspecialchars($pageUrl(1)) ?>" <?= $page === 1 ? 'aria-disabled="true" style="pointer-events:none;opacity:.5"' : '' ?>>หน้าแรก</a>
+        <a class="btn btn-secondary btn-sm" href="<?= htmlspecialchars($pageUrl(max(1, $page - 1))) ?>" <?= $page === 1 ? 'aria-disabled="true" style="pointer-events:none;opacity:.5"' : '' ?>>ก่อนหน้า</a>
+        <?php
+        $firstPage = max(1, $page - 2);
+        $lastPage = min($totalPages, $page + 2);
+        for ($number = $firstPage; $number <= $lastPage; $number++):
+        ?>
+            <a class="btn btn-sm <?= $number === $page ? 'btn-primary' : 'btn-secondary' ?>" href="<?= htmlspecialchars($pageUrl($number)) ?>" <?= $number === $page ? 'aria-current="page"' : '' ?>><?= $number ?></a>
+        <?php endfor; ?>
+        <a class="btn btn-secondary btn-sm" href="<?= htmlspecialchars($pageUrl(min($totalPages, $page + 1))) ?>" <?= $page === $totalPages ? 'aria-disabled="true" style="pointer-events:none;opacity:.5"' : '' ?>>ถัดไป</a>
+        <a class="btn btn-secondary btn-sm" href="<?= htmlspecialchars($pageUrl($totalPages)) ?>" <?= $page === $totalPages ? 'aria-disabled="true" style="pointer-events:none;opacity:.5"' : '' ?>>หน้าสุดท้าย</a>
+        <span style="margin-left:.5rem;color:var(--text-muted)">หน้า <?= number_format($page) ?> / <?= number_format($totalPages) ?></span>
+    </nav>
+    <?php endif; ?>
 </div>
 
 <!-- Simple Modal for Password Reset -->
@@ -240,11 +336,12 @@ require_once '../includes/header.php';
         <h3 style="margin-top: 0;"><?= appIcon('key') ?> รีเซ็ตรหัสผ่าน</h3>
         <p>ผู้ใช้งาน: <strong id="resetUsernameDisplay"></strong></p>
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
             <input type="hidden" name="action" value="reset_password">
             <input type="hidden" name="target_id" id="resetTargetId" value="">
             <div class="form-group" style="margin-bottom: 1rem;">
                 <label for="new_password">รหัสผ่านใหม่:</label>
-                <input type="text" name="new_password" id="new_password" class="form-control" required minlength="4">
+                <input type="password" name="new_password" id="new_password" class="form-control" required minlength="12" maxlength="255" autocomplete="new-password">
             </div>
             <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                 <button type="submit" class="btn btn-primary" style="flex: 1;">บันทึก</button>
@@ -259,6 +356,7 @@ require_once '../includes/header.php';
     <div style="background: white; padding: 2rem; border-radius: 8px; width: 500px; max-width: 90%; max-height: 90vh; overflow-y: auto;">
         <h3 style="margin-top: 0;"><?= appIcon('user-plus') ?> เพิ่มผู้ใช้งานใหม่</h3>
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
             <input type="hidden" name="action" value="add_user">
             
             <div class="form-group" style="margin-bottom: 1rem;">
@@ -267,7 +365,7 @@ require_once '../includes/header.php';
             </div>
             <div class="form-group" style="margin-bottom: 1rem;">
                 <label>รหัสผ่าน:</label>
-                <input type="text" name="password" class="form-control" required minlength="4">
+                <input type="password" name="password" class="form-control" required minlength="12" maxlength="255" autocomplete="new-password">
             </div>
             <div class="form-group" style="margin-bottom: 1rem;">
                 <label>ชื่อ-นามสกุล:</label>
@@ -323,7 +421,7 @@ require_once '../includes/header.php';
 <div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000">
   <div style="background:white;padding:2rem;border-radius:8px;width:520px;max-width:92%;max-height:90vh;overflow:auto">
     <h3><?= appIcon('edit') ?> แก้ไขข้อมูลบุคลากร</h3>
-    <form method="post" class="admin-stack-form"><input type="hidden" name="action" value="edit_user"><input type="hidden" name="target_id" id="edit_id">
+    <form method="post" class="admin-stack-form"><input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>"><input type="hidden" name="action" value="edit_user"><input type="hidden" name="target_id" id="edit_id">
       <label>ชื่อผู้ใช้</label><input class="form-control" type="text" name="username" id="edit_username" required minlength="4">
       <label>ชื่อ-นามสกุล</label><input class="form-control" type="text" name="fullname" id="edit_fullname" required>
       <label>บทบาท</label><select class="form-control" name="role" id="edit_role"><option value="staff">บุคลากร</option><option value="director">ผอ.รพ.สต.</option><option value="ss_amphoe">สสอ.</option><option value="admin">บุคลากร + admin</option></select>

@@ -15,6 +15,7 @@ function formatThaiShortDate(?string $dateValue): string
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     try {
+        verifyAdminCsrf();
         if ($action === 'add') {
             $fiscalYear = filter_var($_POST['fiscal_year'] ?? null, FILTER_VALIDATE_INT, [
                 'options' => ['min_range' => 2500, 'max_range' => 9999],
@@ -45,14 +46,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             adminRedirect('cycles.php', 'success', 'เพิ่มรอบประเมินเรียบร้อย');
         }
         if ($action === 'open') {
+            $id = requestInt($_POST['id'] ?? null, 'id');
             $pdo->beginTransaction();
             $pdo->exec("UPDATE evaluation_cycles SET status = 'closed'");
-            $pdo->prepare("UPDATE evaluation_cycles SET status = 'active' WHERE id = ?")->execute([(int)$_POST['id']]);
+            $stmt = $pdo->prepare("UPDATE evaluation_cycles SET status = 'active' WHERE id = ?");
+            $stmt->execute([$id]);
+            if (!$stmt->rowCount()) throw new RuntimeException('ไม่พบรอบการประเมิน');
             $pdo->commit();
             adminRedirect('cycles.php', 'success', 'เปิดรอบประเมินเรียบร้อย');
         }
         if ($action === 'close') {
-            $pdo->prepare("UPDATE evaluation_cycles SET status = 'closed' WHERE id = ?")->execute([(int)$_POST['id']]);
+            $id = requestInt($_POST['id'] ?? null, 'id');
+            $stmt = $pdo->prepare("UPDATE evaluation_cycles SET status = 'closed' WHERE id = ?");
+            $stmt->execute([$id]);
+            if (!$stmt->rowCount()) throw new RuntimeException('ไม่พบรอบการประเมินที่เปิดอยู่');
             adminRedirect('cycles.php', 'success', 'ปิดรอบประเมินเรียบร้อย');
         }
     } catch (Throwable $e) {
@@ -69,6 +76,7 @@ renderAdminFlash();
 <div class="card" style="margin-bottom:1.5rem">
   <h3>เพิ่มรอบประเมิน</h3>
   <form method="post" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;align-items:end">
+    <?= adminCsrfField() ?>
     <input type="hidden" name="action" value="add">
     <div class="form-group" style="margin-bottom:0">
       <label for="fiscal_year">ปีงบประมาณ</label>
@@ -91,6 +99,6 @@ renderAdminFlash();
 <td><?= htmlspecialchars(formatThaiShortDate($cycle['start_date'])) ?> – <?= htmlspecialchars(formatThaiShortDate($cycle['end_date'])) ?></td>
 <td><?= (int)$cycle['mapping_count'] ?></td><td><?= (int)$cycle['evaluation_count'] ?></td>
 <td><span class="badge" style="background:<?= $cycle['status']==='active'?'#D1FAE5':'#E5E7EB' ?>;color:<?= $cycle['status']==='active'?'#065F46':'#374151' ?>"><?= $cycle['status']==='active'?'เปิดอยู่':'ปิดแล้ว' ?></span></td>
-<td><form method="post"><input type="hidden" name="id" value="<?= $cycle['id'] ?>"><input type="hidden" name="action" value="<?= $cycle['status']==='active'?'close':'open' ?>"><button class="btn <?= $cycle['status']==='active'?'btn-danger':'btn-success' ?>" type="submit"><?= $cycle['status']==='active'?'ปิดรอบ':'เปิดรอบ' ?></button></form></td>
+<td><form method="post"><?= adminCsrfField() ?><input type="hidden" name="id" value="<?= $cycle['id'] ?>"><input type="hidden" name="action" value="<?= $cycle['status']==='active'?'close':'open' ?>"><button class="btn <?= $cycle['status']==='active'?'btn-danger':'btn-success' ?>" type="submit"><?= $cycle['status']==='active'?'ปิดรอบ':'เปิดรอบ' ?></button></form></td>
 </tr><?php endforeach; ?></tbody></table></div></div>
 <?php require_once '../includes/footer.php'; ?>

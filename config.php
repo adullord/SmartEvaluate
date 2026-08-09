@@ -1,5 +1,14 @@
 <?php
+if (PHP_SAPI !== 'cli' && isset($_SERVER['SCRIPT_FILENAME']) && realpath((string)$_SERVER['SCRIPT_FILENAME']) === __FILE__) {
+    http_response_code(404);
+    exit;
+}
+
+require_once __DIR__ . '/includes/security_helper.php';
 require_once __DIR__ . '/includes/icon_helper.php';
+
+applySecurityHeaders();
+validateHttpRequest();
 
 $localConfigFile = __DIR__ . '/config.local.php';
 $localConfig = is_file($localConfigFile) ? require $localConfigFile : [];
@@ -25,9 +34,14 @@ if (session_status() === PHP_SESSION_NONE) {
     $forwardedProto = strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
     $httpsValue = strtolower((string)($_SERVER['HTTPS'] ?? ''));
     $isHttps = ($httpsValue !== '' && $httpsValue !== 'off') || $forwardedProto === 'https';
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.cookie_samesite', 'Strict');
+    session_name('SMARTEVALSESSID');
     session_set_cookie_params([
         'lifetime' => 0,
-        'path' => '/',
+        'path' => APP_BASE_PATH !== '' ? APP_BASE_PATH . '/' : '/',
         'domain' => '',
         'secure' => $isHttps,
         'httponly' => true, // ป้องกัน XSS ดึง Cookie
@@ -61,7 +75,26 @@ try {
     // บังคับเข้ารหัสภาษาไทย
     $pdo->exec("SET NAMES utf8mb4");
     require_once __DIR__ . '/includes/default_admin_helper.php';
-    ensureDefaultAdmin($pdo);
+    $initialAdmin = [
+        'username' => (string)($localConfig['initial_admin_username'] ?? $envOrDefault('INITIAL_ADMIN_USERNAME', '')),
+        'password' => (string)($localConfig['initial_admin_password'] ?? $envOrDefault('INITIAL_ADMIN_PASSWORD', '')),
+    ];
+    ensureDefaultAdmin($pdo, $initialAdmin);
+
+    // Revalidate the account on every request so disabled or demoted accounts lose access immediately.
+    if (isset($_SESSION['user_id'])) {
+        $sessionUser = $pdo->prepare('SELECT id,fullname,role,department_id,expected_level,is_active FROM users WHERE id=? LIMIT 1');
+        $sessionUser->execute([(int)$_SESSION['user_id']]);
+        $freshUser = $sessionUser->fetch();
+        if (!$freshUser || (int)$freshUser['is_active'] !== 1) {
+            destroyCurrentSession();
+        } else {
+            $_SESSION['fullname'] = $freshUser['fullname'];
+            $_SESSION['role'] = $freshUser['role'];
+            $_SESSION['department_id'] = $freshUser['department_id'];
+            $_SESSION['expected_level'] = $freshUser['expected_level'];
+        }
+    }
 } catch (PDOException $e) {
     error_log('Database connection failed: ' . $e->getMessage());
     http_response_code(503);

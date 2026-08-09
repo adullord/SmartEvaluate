@@ -55,6 +55,14 @@ function importUsersFromSpreadsheet(PDO $pdo, array $file): array
         throw new RuntimeException('รองรับเฉพาะไฟล์ .xlsx และ .xls');
     }
 
+    if (PHP_SAPI !== 'cli' && !is_uploaded_file((string)($file['tmp_name'] ?? ''))) {
+        throw new RuntimeException('ไฟล์อัปโหลดไม่ถูกต้อง');
+    }
+    $readerType = IOFactory::identify((string)$file['tmp_name']);
+    if (!in_array($readerType, ['Xlsx', 'Xls'], true)) {
+        throw new RuntimeException('เนื้อหาไฟล์ไม่ใช่ Excel ที่รองรับ');
+    }
+
     $spreadsheet = IOFactory::load($file['tmp_name']);
     $sheet = $spreadsheet->getSheetByName('ข้อมูลนำเข้า') ?? $spreadsheet->getActiveSheet();
     $requiredHeaders = [
@@ -97,7 +105,8 @@ function importUsersFromSpreadsheet(PDO $pdo, array $file): array
         '0' => 0, 'ปิดใช้งาน' => 0, 'inactive' => 0,
     ];
 
-    for ($row = 2; $row <= $sheet->getHighestDataRow(); $row++) {
+    $highestRow = min(5000, $sheet->getHighestDataRow());
+    for ($row = 2; $row <= $highestRow; $row++) {
         $values = [];
         foreach (array_keys($requiredHeaders) as $column) {
             $values[$column] = normalizeImportText($sheet->getCell($column . $row)->getFormattedValue());

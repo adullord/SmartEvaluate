@@ -23,13 +23,14 @@ $stmt = $pdo->prepare("
     JOIN users u2 ON e.evaluator_id = u2.id
     JOIN evaluation_cycles c ON e.cycle_id = c.id
     WHERE :is_admin = 1
-       OR e.evaluatee_id = :evaluatee_uid
-       OR e.evaluator_id = :evaluator_uid
+       OR (e.evaluatee_id = :evaluatee_uid AND e.status IN ('submitted','acknowledged'))
+       OR (:can_view_assigned = 1 AND e.evaluator_id = :evaluator_uid)
     ORDER BY c.id DESC, e.id DESC
 ");
 $stmt->execute([
     'is_admin' => $user_role === 'admin' ? 1 : 0,
     'evaluatee_uid' => (int)$user_id,
+    'can_view_assigned' => in_array($user_role, ['ss_amphoe','director'], true) ? 1 : 0,
     'evaluator_uid' => (int)$user_id,
 ]);
 $reports = $stmt->fetchAll();
@@ -41,7 +42,7 @@ require_once 'includes/header.php';
     <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
         <div>
             <h2 class="card-title"><?= appIcon('bar-chart') ?> รายงานผลการประเมิน</h2>
-            <p class="card-subtitle">รายการผลการประเมินที่คุณมีสิทธิ์เข้าถึง (ในฐานะผู้ประเมิน ผู้ถูกประเมิน หรือผู้ดูแลระบบ)</p>
+            <p class="card-subtitle"><?= $user_role === 'staff' ? 'แสดงเฉพาะผลการประเมินของคุณ' : 'รายการผลการประเมินตามสิทธิ์ของคุณ' ?></p>
         </div>
     </div>
     

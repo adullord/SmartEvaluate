@@ -1,9 +1,14 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../csrf_helper.php';
 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
-    header('Location: ' . appUrl('index.php'));
+if (!isset($_SESSION['user_id'])) {
+    header('Location: ' . appUrl('login.php'));
     exit;
+}
+if (($_SESSION['role'] ?? '') !== 'admin') {
+    http_response_code(403);
+    exit('ไม่มีสิทธิ์เข้าถึงหน้าผู้ดูแลระบบ');
 }
 
 function adminRedirect(string $path, string $type, string $message): never
@@ -11,6 +16,19 @@ function adminRedirect(string $path, string $type, string $message): never
     $_SESSION['admin_flash'] = ['type' => $type, 'message' => $message];
     header('Location: ' . $path);
     exit;
+}
+
+function adminCsrfField(): string
+{
+    return '<input type="hidden" name="csrf_token" value="'
+        . htmlspecialchars(generate_csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+}
+
+function verifyAdminCsrf(): void
+{
+    if (!verify_csrf_token((string)($_POST['csrf_token'] ?? ''))) {
+        throw new RuntimeException('คำขอหมดอายุ กรุณารีเฟรชหน้าแล้วลองใหม่อีกครั้ง');
+    }
 }
 
 function renderAdminFlash(): void

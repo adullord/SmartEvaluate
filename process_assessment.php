@@ -1,61 +1,92 @@
 <?php
 require_once 'config.php';
+require_once 'csrf_helper.php';
+require_once 'includes/expected_level_helper.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
 }
+if (!in_array((string)($_SESSION['role'] ?? ''), ['admin','ss_amphoe','director'], true)) {
+    http_response_code(403);
+    exit('ไม่มีสิทธิ์ประเมินบุคลากรอื่น');
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST');
+    exit('Method Not Allowed');
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verify_csrf_token((string)($_POST['csrf_token'] ?? ''))) {
+        http_response_code(403);
+        exit('คำขอหมดอายุ กรุณากลับไปยังแบบประเมินแล้วลองใหม่');
+    }
     $evaluator_id = $_SESSION['user_id'];
-    $evaluatee_id = $_POST['evaluatee_id'] ?? 0;
-    $cycle_id = $_POST['cycle_id'] ?? 0;
-    $action = $_POST['action'] ?? 'draft'; // draft or submit
-    $scores = $_POST['scores'] ?? [];
-    $reasons = $_POST['reasons'] ?? [];
+    $evaluatee_id = requestInt($_POST['evaluatee_id'] ?? null, 'evaluatee_id');
+    $cycle_id = requestInt($_POST['cycle_id'] ?? null, 'cycle_id');
+    $action = (string)($_POST['action'] ?? 'draft');
+    $scores = is_array($_POST['scores'] ?? null) ? $_POST['scores'] : [];
+    $reasons = is_array($_POST['reasons'] ?? null) ? $_POST['reasons'] : [];
 
-    if (!$evaluatee_id || !$cycle_id || empty($scores)) {
+    if (!in_array($action, ['draft', 'submit'], true) || empty($scores)) {
         die("ข้อมูลไม่ครบถ้วน");
     }
 
     // ตรวจสอบสิทธิ์ว่าได้รับมอบหมายให้ประเมินคนนี้ในรอบนี้จริงหรือไม่
-    $stmt = $pdo->prepare("SELECT * FROM evaluator_mapping WHERE evaluator_id = ? AND evaluatee_id = ? AND cycle_id = ?");
+    $stmt = $pdo->prepare("SELECT em.id,c.status FROM evaluator_mapping em JOIN evaluation_cycles c ON c.id=em.cycle_id WHERE em.evaluator_id = ? AND em.evaluatee_id = ? AND em.cycle_id = ?");
     $stmt->execute([$evaluator_id, $evaluatee_id, $cycle_id]);
-    if (!$stmt->fetch()) {
+    $mapping = $stmt->fetch();
+    if (!$mapping) {
         die("คุณไม่มีสิทธิ์ประเมินบุคลากรท่านนี้");
     }
+    if ($mapping['status'] !== 'active') die('รอบการประเมินนี้ปิดแล้ว');
 
     // คำนวณคะแนนรวมฝั่ง Backend เพื่อความปลอดภัย
     // ดึง expected_level และ position_id ของผู้รับการประเมิน
-    $stmt = $pdo->prepare("SELECT expected_level, position_id FROM users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT u.expected_level,u.position_id,p.name pos_name,r.name rank_name FROM users u JOIN positions p ON p.id=u.position_id JOIN ranks r ON r.id=u.rank_id WHERE u.id = ? AND u.is_active=1");
     $stmt->execute([$evaluatee_id]);
     $evaluatee = $stmt->fetch();
-    $expected_level = $evaluatee['expected_level'];
-    $position_id = $evaluatee['position_id'];
+    if (!$evaluatee) die('ไม่พบผู้รับการประเมิน');
+    $expected_level = expectedLevelByPositionRank($evaluatee['pos_name'], $evaluatee['rank_name'])
+        ?? (int)$evaluatee['expected_level'];
+    $position_id = (int)$evaluatee['position_id'];
 
     // ดึงน้ำหนักของแต่ละสมรรถนะ
     $stmt = $pdo->prepare("SELECT competency_id, weight FROM evaluation_templates WHERE position_id = ? AND expected_level = ?");
     $stmt->execute([$position_id, $expected_level]);
     $templates = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // [competency_id => weight]
 
-    // ดึงว่าแต่ละ indicator อยู่ competency ไหน
-    $stmt = $pdo->query("SELECT id, competency_id FROM indicators");
-    $ind_map = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // [indicator_id => competency_id]
+    // Whitelist เฉพาะพฤติกรรมบ่งชี้ที่แสดงจริงสำหรับตำแหน่งและระดับนี้
+    $stmt = $pdo->prepare("SELECT i.id,i.competency_id
+        FROM indicators i
+        JOIN evaluation_templates t ON t.competency_id=i.competency_id AND t.position_id=? AND t.expected_level=?
+        WHERE (i.position_id IS NULL OR i.position_id=?)
+          AND i.expected_level=COALESCE((
+              SELECT MAX(i2.expected_level) FROM indicators i2
+              WHERE i2.competency_id=i.competency_id AND i2.expected_level<=?
+                AND (i2.position_id IS NULL OR i2.position_id=?)
+          ), ?)");
+    $stmt->execute([$position_id,$expected_level,$position_id,$expected_level,$position_id,$expected_level]);
+    $ind_map = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
     $comp_scores = [];
+    $validatedScores = [];
     foreach ($scores as $ind_id => $val) {
-        $val = (int)$val;
-        if ($val < 1 || $val > 5) continue;
-        
-        $comp_id = $ind_map[$ind_id] ?? 0;
-        if ($comp_id) {
-            if (!isset($comp_scores[$comp_id])) {
-                $comp_scores[$comp_id] = ['sum' => 0, 'count' => 0];
-            }
-            $comp_scores[$comp_id]['sum'] += $val;
-            $comp_scores[$comp_id]['count'] += 1;
+        $indicatorId = requestInt($ind_id, 'indicator_id');
+        if (!array_key_exists($indicatorId, $ind_map) || is_array($val) || !preg_match('/^[1-5]$/', (string)$val)) {
+            http_response_code(400);
+            exit('ข้อมูลคะแนนไม่ถูกต้อง');
         }
+        $score = (int)$val;
+        $validatedScores[$indicatorId] = $score;
+        $comp_id = (int)$ind_map[$indicatorId];
+        if (!isset($comp_scores[$comp_id])) $comp_scores[$comp_id] = ['sum' => 0, 'count' => 0];
+        $comp_scores[$comp_id]['sum'] += $score;
+        $comp_scores[$comp_id]['count'] += 1;
     }
+    if ($action === 'submit' && count($validatedScores) !== count($ind_map)) die('กรุณากรอกคะแนนให้ครบทุกพฤติกรรมบ่งชี้');
 
     $totalBase5 = 0;
     foreach ($comp_scores as $comp_id => $data) {
@@ -96,8 +127,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Insert new scores
         $stmt = $pdo->prepare("INSERT INTO evaluation_scores (evaluation_id, indicator_id, score, reason) VALUES (?, ?, ?, ?)");
-        foreach ($scores as $ind_id => $val) {
-            $reason = trim($reasons[$ind_id] ?? '');
+        foreach ($validatedScores as $ind_id => $val) {
+            $reasonValue = $reasons[$ind_id] ?? '';
+            $reason = is_array($reasonValue) ? '' : mb_substr(trim((string)$reasonValue), 0, 2000);
             $stmt->execute([$eval_id, $ind_id, $val, $reason]);
         }
         
@@ -110,9 +142,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: index.php?success=1");
         exit;
 
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        die("Error: " . $e->getMessage());
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Assessment save failed: ' . $e->getMessage());
+        http_response_code(500);
+        die('ไม่สามารถบันทึกแบบประเมินได้ กรุณาลองใหม่หรือติดต่อผู้ดูแลระบบ');
     }
 }
 ?>

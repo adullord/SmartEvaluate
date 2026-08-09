@@ -322,4 +322,67 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 
+-- ระบบตัวชี้วัดผลสัมฤทธิ์ของงาน
+CREATE TABLE IF NOT EXISTS `kpi_indicators` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `cycle_id` int NOT NULL,
+  `name` text NOT NULL,
+  `target_label` varchar(255) DEFAULT NULL,
+  `unit` varchar(100) DEFAULT NULL,
+  `weight` decimal(8,2) NOT NULL DEFAULT 0,
+  `target_value` decimal(14,4) DEFAULT NULL,
+  `score_1_threshold` decimal(14,4) NOT NULL,
+  `score_2_threshold` decimal(14,4) NOT NULL,
+  `score_3_threshold` decimal(14,4) NOT NULL,
+  `score_4_threshold` decimal(14,4) NOT NULL,
+  `score_5_threshold` decimal(14,4) NOT NULL,
+  `scoring_direction` enum('ascending','descending') NOT NULL DEFAULT 'ascending',
+  `order_seq` int NOT NULL DEFAULT 1,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`), KEY `idx_kpi_indicators_cycle` (`cycle_id`,`order_seq`),
+  CONSTRAINT `fk_kpi_indicators_cycle` FOREIGN KEY (`cycle_id`) REFERENCES `evaluation_cycles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `kpi_assignments` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `indicator_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `responsibility_type` enum('primary','secondary') NOT NULL DEFAULT 'primary',
+  `assigned_by` int NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`), UNIQUE KEY `uq_kpi_assignment` (`indicator_id`,`user_id`), KEY `idx_kpi_assignment_user` (`user_id`),
+  CONSTRAINT `fk_kpi_assignment_indicator` FOREIGN KEY (`indicator_id`) REFERENCES `kpi_indicators` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_kpi_assignment_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_kpi_assignment_by` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `kpi_results` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `indicator_id` int NOT NULL,
+  `department_id` int NOT NULL,
+  `actual_value` decimal(14,4) DEFAULT NULL,
+  `percentage` decimal(14,4) DEFAULT NULL,
+  `score` decimal(5,2) DEFAULT NULL,
+  `weighted_score` decimal(12,4) DEFAULT NULL,
+  `note` text DEFAULT NULL,
+  `entered_by` int NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`), UNIQUE KEY `uq_kpi_result` (`indicator_id`,`department_id`), KEY `idx_kpi_result_department` (`department_id`),
+  CONSTRAINT `fk_kpi_result_indicator` FOREIGN KEY (`indicator_id`) REFERENCES `kpi_indicators` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_kpi_result_department` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_kpi_result_entered_by` FOREIGN KEY (`entered_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `kpi_indicators` (`cycle_id`,`name`,`target_label`,`unit`,`weight`,`target_value`,`score_1_threshold`,`score_2_threshold`,`score_3_threshold`,`score_4_threshold`,`score_5_threshold`,`scoring_direction`,`order_seq`)
+SELECT c.id,s.name,s.target_label,s.unit,s.weight,s.target_value,s.s1,s.s2,s.s3,s.s4,s.s5,s.direction,s.order_seq
+FROM `evaluation_cycles` c JOIN (
+ SELECT 1 order_seq,'หน่วยงานส่งข้อมูล 43 แฟ้ม ทันเวลา อย่างน้อยวันละ 1 ครั้ง' name,'ร้อยละ 100' target_label,'ร้อยละ' unit,1.50 weight,100.0000 target_value,80.0000 s1,85.0000 s2,90.0000 s3,95.0000 s4,100.0000 s5,'ascending' direction
+ UNION ALL SELECT 2,'การเบิกจ่ายค่าชดเชยบริการสาธารณสุข','100 บาท/ประชากร','บาท/ประชากร',1.50,20.0000,1.0000,5.0000,10.0000,15.0000,20.0000,'ascending'
+ UNION ALL SELECT 3,'ประชากรซ้ำซ้อน ไม่เกินร้อยละ 1','น้อยกว่าร้อยละ 1','ร้อยละ',1.50,1.0000,1.2500,1.0000,0.7500,0.5000,0.2500,'descending'
+) s WHERE c.fiscal_year='2569' AND (c.round_name='2' OR c.round_name LIKE '%2%')
+AND NOT EXISTS (SELECT 1 FROM `kpi_indicators` k WHERE k.cycle_id=c.id);
+
 -- บัญชีผู้ดูแลระบบเริ่มต้นจะถูกสร้างอัตโนมัติเมื่อเปิดเว็บไซต์ครั้งแรก

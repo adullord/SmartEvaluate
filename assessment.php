@@ -1,15 +1,20 @@
 <?php
 require_once 'config.php';
+require_once 'csrf_helper.php';
 require_once 'includes/expected_level_helper.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
 }
+if (!in_array((string)($_SESSION['role'] ?? ''), ['admin','ss_amphoe','director'], true)) {
+    http_response_code(403);
+    exit('ไม่มีสิทธิ์ประเมินบุคลากรอื่น');
+}
 
 $evaluator_id = $_SESSION['user_id'];
-$evaluatee_id = (int)($_GET['evaluatee_id'] ?? 0);
-$cycle_id = (int)($_GET['cycle_id'] ?? 0);
+$evaluatee_id = requestInt($_GET['evaluatee_id'] ?? null, 'evaluatee_id');
+$cycle_id = requestInt($_GET['cycle_id'] ?? null, 'cycle_id');
 
 if (!$evaluatee_id || !$cycle_id) {
     die("ข้อมูลไม่ครบถ้วน");
@@ -163,6 +168,7 @@ require_once 'includes/header.php';
 </div>
 
 <form id="assessmentForm" method="POST" action="process_assessment.php" novalidate>
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="evaluatee_id" value="<?= $evaluatee_id ?>">
     <input type="hidden" name="cycle_id" value="<?= $cycle_id ?>">
     

@@ -14,7 +14,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 try {
-    $evaluationId = (int)($_GET['id'] ?? 0);
+    $evaluationId = requestInt($_GET['id'] ?? null, 'id');
     if (!$evaluationId) throw new RuntimeException('ไม่พบรหัสการประเมิน');
     $report = loadEvaluationExportData($pdo, $evaluationId, (int)$_SESSION['user_id'], (string)$_SESSION['role']);
     $evaluation = $report['evaluation'];
@@ -62,7 +62,7 @@ try {
     $roundDate = $roundNumber === 2 ? '1 ตุลาคม' : '1 เมษายน';
     $roundDisplay = 'รอบที่ ' . $roundNumber . ' ' . $roundDate . ' ' . $evaluation['fiscal_year'];
     $html = '<!doctype html><html lang="th"><head><meta charset="utf-8"><style>
-        @page{margin:5mm} body{font-family:thsarabun;font-size:16pt;color:#111;margin:0;line-height:1}
+        @page{margin:5mm} body{font-family:sarabun;font-size:16pt;color:#111;margin:0;line-height:1}
         table{border-collapse:collapse;table-layout:fixed;width:100%}.top{margin-bottom:1.2mm}.top td{padding:0.7mm 1.1mm;vertical-align:middle;line-height:1.05}
         .titlebox{border:0.3mm solid #111;text-align:center;font-size:18pt;font-weight:bold}.top-label{font-weight:bold}.sign-line{white-space:nowrap}
         table.report{width:100%;border-collapse:collapse;table-layout:fixed}.report th,.report td{border:0.25mm solid #111;padding:0.85mm 1mm;vertical-align:middle;line-height:1.05}
@@ -95,12 +95,12 @@ try {
     if (!is_dir($tempDir)) mkdir($tempDir, 0777, true);
     $mpdf = new Mpdf([
         'mode' => 'utf-8', 'format' => 'A4-L', 'tempDir' => $tempDir,
-        'fontDir' => array_merge($defaultConfig['fontDir'], ['C:/Windows/Fonts']),
-        'fontdata' => $fontConfig['fontdata'] + ['thsarabun' => [
-            'R' => 'THSarabun.ttf', 'B' => 'THSarabun Bold.ttf',
-            'I' => 'THSarabun Italic.ttf', 'BI' => 'THSarabun BoldItalic.ttf',
+        'fontDir' => array_merge($defaultConfig['fontDir'], [__DIR__ . '/assets/fonts/sarabun']),
+        'fontdata' => $fontConfig['fontdata'] + ['sarabun' => [
+            'R' => 'Sarabun-Regular.ttf', 'B' => 'Sarabun-Bold.ttf',
+            'I' => 'Sarabun-Italic.ttf', 'BI' => 'Sarabun-BoldItalic.ttf',
         ]],
-        'default_font' => 'thsarabun',
+        'default_font' => 'sarabun',
     ]);
     $mpdf->SetTitle('สรุปผลการประเมิน - ' . $evaluation['evaluatee_name']);
     $mpdf->WriteHTML($html);

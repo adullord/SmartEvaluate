@@ -1,22 +1,57 @@
-Options -Indexes
+Options -Indexes -MultiViews
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    RewriteCond %{THE_REQUEST} "[\x00-\x1F\x7F]" [OR]
+    RewriteCond %{REQUEST_URI} "(?:^|/)\.\.(?:/|$)" [NC,OR]
+    RewriteCond %{REQUEST_URI} "\\" [NC]
+    RewriteRule ^ - [R=400,L]
+
     RewriteRule ^(?:includes|tmp|vendor)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:\.git|\.svn|\.hg)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:assets|outputs)/.*\.php$ - [F,L,NC]
 </IfModule>
 
-<FilesMatch "^(?:config(?:\.local(?:\.example)?)?\.php|composer\.(?:json|lock)|database.*\.sql)$">
+<FilesMatch "^(?:\.|README(?:\.md)?|SECURITY(?:\.md)?|config(?:\.local(?:\.example)?)?\.php|csrf_helper\.php|report_export_data\.php|_bootstrap\.php|.*_helper\.php|composer\.(?:json|lock)|database.*\.sql)$">
     Require all denied
 </FilesMatch>
 
 <IfModule mod_headers.c>
+    Header unset X-Powered-By
+    Header always unset X-Powered-By
+    Header unset X-Content-Type-Options
+    Header unset X-Frame-Options
+    Header unset Referrer-Policy
+    Header unset Permissions-Policy
+    Header unset Content-Security-Policy
+    Header unset Cross-Origin-Opener-Policy
+    Header unset Cross-Origin-Resource-Policy
+    Header always unset X-Content-Type-Options
+    Header always unset X-Frame-Options
+    Header always unset Referrer-Policy
+    Header always unset Permissions-Policy
+    Header always unset Content-Security-Policy
+    Header always unset Cross-Origin-Opener-Policy
+    Header always unset Cross-Origin-Resource-Policy
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set Referrer-Policy "same-origin"
     Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    Header always set Cross-Origin-Opener-Policy "same-origin"
+    Header always set Cross-Origin-Resource-Policy "same-origin"
 </IfModule>
 
 <IfModule mod_php.c>
+    php_flag expose_php Off
+    php_flag display_errors Off
+    php_flag log_errors On
+    php_value session.cookie_httponly 1
+    php_value session.cookie_samesite Strict
+</IfModule>
+
+<IfModule php_module>
+    php_flag expose_php Off
     php_flag display_errors Off
     php_flag log_errors On
     php_value session.cookie_httponly 1

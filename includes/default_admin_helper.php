@@ -1,7 +1,7 @@
 <?php
 
-/** Create the initial administrator only when the system has no admin account. */
-function ensureDefaultAdmin(PDO $pdo): void
+/** Create the initial administrator only from an explicit, private deployment secret. */
+function ensureDefaultAdmin(PDO $pdo, array $credentials = []): void
 {
     $requiredTables = ['users', 'departments', 'positions', 'ranks'];
     $tableCheck = $pdo->prepare(
@@ -21,6 +21,13 @@ function ensureDefaultAdmin(PDO $pdo): void
         $pdo->exec("ALTER TABLE users MODIFY role ENUM('admin','ss_amphoe','director','staff') NOT NULL");
     }
     if ((int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='admin'")->fetchColumn() > 0) return;
+
+    $username = trim((string)($credentials['username'] ?? ''));
+    $password = (string)($credentials['password'] ?? '');
+    if (!preg_match('/^[A-Za-z0-9._-]{4,13}$/', $username) || strlen($password) < 12 || strlen($password) > 255) {
+        // Never create a predictable public default account.
+        return;
+    }
 
     $pdo->beginTransaction();
     try {
@@ -47,10 +54,9 @@ function ensureDefaultAdmin(PDO $pdo): void
             $rankId = (int)$pdo->lastInsertId();
         }
 
-        $username = 'admin';
         $usernameExists = $pdo->prepare('SELECT COUNT(*) FROM users WHERE username=?');
         $usernameExists->execute([$username]);
-        if ($usernameExists->fetchColumn()) $username = 'system_admin';
+        if ($usernameExists->fetchColumn()) throw new RuntimeException('Initial administrator username already exists');
 
         $insert = $pdo->prepare(
             'INSERT INTO users
@@ -59,7 +65,7 @@ function ensureDefaultAdmin(PDO $pdo): void
         );
         $insert->execute([
             $username,
-            password_hash('admin1234', PASSWORD_DEFAULT),
+            password_hash($password, PASSWORD_DEFAULT),
             'ผู้ดูแลระบบ',
             'admin',
             $departmentId,

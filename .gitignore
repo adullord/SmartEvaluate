@@ -33,6 +33,16 @@ out/
 .env.local
 .env.*.local
 
+# Local deployment secrets
+/config.local.php
+
+# Runtime-generated data
+/tmp/*
+!/tmp/.gitkeep
+
+# Local source spreadsheets (download templates under outputs remain versioned)
+/*.xlsx
+
 # npm cache directory
 .npm
 *.tgz

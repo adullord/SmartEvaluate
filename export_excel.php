@@ -12,7 +12,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 try {
-    $evaluationId = (int)($_GET['id'] ?? 0);
+    $evaluationId = requestInt($_GET['id'] ?? null, 'id');
     if (!$evaluationId) {
         throw new RuntimeException('ไม่พบรหัสการประเมิน');
     }

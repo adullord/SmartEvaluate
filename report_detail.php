@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once 'csrf_helper.php';
 require_once 'includes/expected_level_helper.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -7,8 +8,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
-$evaluation_id = $_GET['id'] ?? 0;
+$user_id = (int)$_SESSION['user_id'];
+$evaluation_id = requestInt($_GET['id'] ?? null, 'id');
 
 if (!$evaluation_id) {
     die("ไม่พบข้อมูล");
@@ -36,13 +37,21 @@ if (!$evaluation) {
 }
 
 // เช็คสิทธิ์: เป็นผู้ประเมิน, ผู้ถูกประเมิน, หรือ Admin
-if ($user_id !== $evaluation['evaluator_id'] && $user_id !== $evaluation['evaluatee_id'] && $_SESSION['role'] !== 'admin') {
+$isEvaluator = in_array((string)($_SESSION['role'] ?? ''), ['ss_amphoe','director'], true)
+    && $user_id === (int)$evaluation['evaluator_id'];
+$isEvaluateeWithReleasedResult = $user_id === (int)$evaluation['evaluatee_id'] && in_array($evaluation['status'], ['submitted', 'acknowledged'], true);
+if (!$isEvaluator && !$isEvaluateeWithReleasedResult && $_SESSION['role'] !== 'admin') {
+    http_response_code(403);
     die("คุณไม่มีสิทธิ์เข้าถึงข้อมูลนี้");
 }
 
 // จัดการการกดรับทราบ (Acknowledge)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'acknowledge') {
-    if ($user_id === $evaluation['evaluatee_id'] && $evaluation['status'] === 'submitted') {
+    if (!verify_csrf_token((string)($_POST['csrf_token'] ?? ''))) {
+        http_response_code(403);
+        die('คำขอหมดอายุ กรุณารีเฟรชหน้าแล้วลองใหม่');
+    }
+    if ($user_id === (int)$evaluation['evaluatee_id'] && $evaluation['status'] === 'submitted') {
         $stmt = $pdo->prepare("UPDATE evaluations SET status = 'acknowledged', acknowledged_at = CURRENT_TIMESTAMP WHERE id = ?");
         $stmt->execute([$evaluation_id]);
         
@@ -157,11 +166,12 @@ require_once 'includes/header.php';
     </div>
 </div>
 
-<?php if ($user_id === $evaluation['evaluatee_id'] && $evaluation['status'] === 'submitted'): ?>
+<?php if ($user_id === (int)$evaluation['evaluatee_id'] && $evaluation['status'] === 'submitted'): ?>
 <div class="card" style="background-color: #FEF3C7; border: 1px solid #F59E0B; margin-bottom: 2rem;">
     <h3 style="color: #D97706; margin-top:0;"><?= appIcon('triangle-alert') ?> การรับทราบผลการประเมิน</h3>
     <p style="color: #92400E;">กรุณาตรวจสอบผลการประเมินของท่าน และกดยืนยันการรับทราบผลด้านล่าง หากมีข้อโต้แย้งกรุณาติดต่อผู้ประเมินก่อนกดยอมรับ</p>
     <form method="POST">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
         <button type="submit" name="action" value="acknowledge" class="btn btn-success" style="font-size: 1.1rem; padding: 0.75rem 2rem;">
             <?= appIcon('check-circle') ?> ข้าพเจ้าขอรับทราบผลการประเมิน
         </button>
