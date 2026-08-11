@@ -376,6 +376,83 @@ CREATE TABLE IF NOT EXISTS `kpi_results` (
   CONSTRAINT `fk_kpi_result_entered_by` FOREIGN KEY (`entered_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `component3_cycle_settings` (
+  `cycle_id` int NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`cycle_id`),
+  CONSTRAINT `fk_component3_cycle_setting_cycle` FOREIGN KEY (`cycle_id`) REFERENCES `evaluation_cycles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `component3_items` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `cycle_id` int NOT NULL,
+  `item_no` int NOT NULL,
+  `name` text NOT NULL,
+  `weight` decimal(8,2) NOT NULL DEFAULT 0,
+  `target_value` decimal(14,4) DEFAULT NULL,
+  `target_label` varchar(255) DEFAULT NULL,
+  `input_type` enum('count','percentage','department_score') NOT NULL DEFAULT 'count',
+  `audience` enum('all','sso_director') NOT NULL DEFAULT 'all',
+  `responsible` varchar(255) DEFAULT NULL,
+  `score_1_threshold` decimal(14,4) DEFAULT NULL,
+  `score_2_threshold` decimal(14,4) DEFAULT NULL,
+  `score_3_threshold` decimal(14,4) DEFAULT NULL,
+  `score_4_threshold` decimal(14,4) DEFAULT NULL,
+  `score_5_threshold` decimal(14,4) DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_component3_item_no` (`cycle_id`,`item_no`),
+  KEY `idx_component3_item_cycle` (`cycle_id`,`is_active`,`item_no`),
+  CONSTRAINT `fk_component3_item_cycle` FOREIGN KEY (`cycle_id`) REFERENCES `evaluation_cycles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `component3_assessments` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `cycle_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `status` enum('draft','submitted') NOT NULL DEFAULT 'draft',
+  `applicable_weight` decimal(8,2) NOT NULL DEFAULT 0,
+  `total_weighted_score` decimal(12,4) NOT NULL DEFAULT 0,
+  `final_score` decimal(8,2) NOT NULL DEFAULT 0,
+  `submitted_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_component3_assessment` (`cycle_id`,`user_id`),
+  KEY `idx_component3_assessment_user` (`user_id`),
+  CONSTRAINT `fk_component3_assessment_cycle` FOREIGN KEY (`cycle_id`) REFERENCES `evaluation_cycles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_component3_assessment_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `component3_scores` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `assessment_id` int NOT NULL,
+  `item_no` tinyint NOT NULL,
+  `actual_value` decimal(14,4) DEFAULT NULL,
+  `percentage` decimal(14,4) DEFAULT NULL,
+  `score` decimal(5,2) NOT NULL DEFAULT 0,
+  `weight` decimal(8,2) NOT NULL DEFAULT 0,
+  `weighted_score` decimal(12,4) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_component3_score` (`assessment_id`,`item_no`),
+  CONSTRAINT `fk_component3_score_assessment` FOREIGN KEY (`assessment_id`) REFERENCES `component3_assessments` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `component3_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `assessment_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `action` varchar(100) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_component3_log_assessment` (`assessment_id`),
+  KEY `idx_component3_log_user` (`user_id`),
+  CONSTRAINT `fk_component3_log_assessment` FOREIGN KEY (`assessment_id`) REFERENCES `component3_assessments` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_component3_log_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 INSERT INTO `kpi_indicators` (`cycle_id`,`name`,`target_label`,`unit`,`weight`,`target_value`,`score_1_threshold`,`score_2_threshold`,`score_3_threshold`,`score_4_threshold`,`score_5_threshold`,`scoring_direction`,`order_seq`)
 SELECT c.id,s.name,s.target_label,s.unit,s.weight,s.target_value,s.s1,s.s2,s.s3,s.s4,s.s5,s.direction,s.order_seq
 FROM `evaluation_cycles` c JOIN (

@@ -23,25 +23,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         http_response_code(403);
         exit('คำขอหมดอายุ กรุณากลับไปยังแบบประเมินแล้วลองใหม่');
     }
-    $evaluator_id = $_SESSION['user_id'];
+    $actor_id = (int)$_SESSION['user_id'];
+    $evaluator_id = $actor_id;
     $evaluatee_id = requestInt($_POST['evaluatee_id'] ?? null, 'evaluatee_id');
     $cycle_id = requestInt($_POST['cycle_id'] ?? null, 'cycle_id');
     $action = (string)($_POST['action'] ?? 'draft');
+    $adminEvaluationId = requestInt($_POST['evaluation_id'] ?? null, 'evaluation_id', 0, 0);
+    $isAdminUpdate = (string)($_SESSION['role'] ?? '') === 'admin' && $action === 'admin_update' && $adminEvaluationId > 0;
     $scores = is_array($_POST['scores'] ?? null) ? $_POST['scores'] : [];
     $reasons = is_array($_POST['reasons'] ?? null) ? $_POST['reasons'] : [];
 
-    if (!in_array($action, ['draft', 'submit'], true) || empty($scores)) {
+    if (!in_array($action, ['draft', 'submit', 'admin_update'], true) || ($action === 'admin_update' && !$isAdminUpdate) || empty($scores)) {
         die("ข้อมูลไม่ครบถ้วน");
     }
 
     // ตรวจสอบสิทธิ์ว่าได้รับมอบหมายให้ประเมินคนนี้ในรอบนี้จริงหรือไม่
-    $stmt = $pdo->prepare("SELECT em.id,c.status FROM evaluator_mapping em JOIN evaluation_cycles c ON c.id=em.cycle_id WHERE em.evaluator_id = ? AND em.evaluatee_id = ? AND em.cycle_id = ?");
-    $stmt->execute([$evaluator_id, $evaluatee_id, $cycle_id]);
-    $mapping = $stmt->fetch();
-    if (!$mapping) {
-        die("คุณไม่มีสิทธิ์ประเมินบุคลากรท่านนี้");
+    $adminEvaluation = null;
+    if ($isAdminUpdate) {
+        $stmt = $pdo->prepare('SELECT id,evaluator_id,evaluatee_id,cycle_id,status FROM evaluations WHERE id=?');
+        $stmt->execute([$adminEvaluationId]);
+        $adminEvaluation = $stmt->fetch();
+        if (!$adminEvaluation || (int)$adminEvaluation['evaluatee_id'] !== $evaluatee_id || (int)$adminEvaluation['cycle_id'] !== $cycle_id) {
+            http_response_code(403);
+            exit('ไม่มีสิทธิ์แก้ไขผลการประเมินรายการนี้');
+        }
+        $evaluator_id = (int)$adminEvaluation['evaluator_id'];
+    } else {
+        $stmt = $pdo->prepare("SELECT em.id,c.status FROM evaluator_mapping em JOIN evaluation_cycles c ON c.id=em.cycle_id WHERE em.evaluator_id = ? AND em.evaluatee_id = ? AND em.cycle_id = ?");
+        $stmt->execute([$evaluator_id, $evaluatee_id, $cycle_id]);
+        $mapping = $stmt->fetch();
+        if (!$mapping) die("คุณไม่มีสิทธิ์ประเมินบุคลากรท่านนี้");
+        if ($mapping['status'] !== 'active') die('รอบการประเมินนี้ปิดแล้ว');
     }
-    if ($mapping['status'] !== 'active') die('รอบการประเมินนี้ปิดแล้ว');
 
     // คำนวณคะแนนรวมฝั่ง Backend เพื่อความปลอดภัย
     // ดึง expected_level และ position_id ของผู้รับการประเมิน
@@ -86,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $comp_scores[$comp_id]['sum'] += $score;
         $comp_scores[$comp_id]['count'] += 1;
     }
-    if ($action === 'submit' && count($validatedScores) !== count($ind_map)) die('กรุณากรอกคะแนนให้ครบทุกพฤติกรรมบ่งชี้');
+    if (in_array($action, ['submit', 'admin_update'], true) && count($validatedScores) !== count($ind_map)) die('กรุณากรอกคะแนนให้ครบทุกพฤติกรรมบ่งชี้');
 
     $totalBase5 = 0;
     foreach ($comp_scores as $comp_id => $data) {
@@ -103,14 +116,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
 
         // Check if evaluation exists
-        $stmt = $pdo->prepare("SELECT id, status FROM evaluations WHERE evaluator_id = ? AND evaluatee_id = ? AND cycle_id = ?");
-        $stmt->execute([$evaluator_id, $evaluatee_id, $cycle_id]);
+        $stmt = $isAdminUpdate
+            ? $pdo->prepare("SELECT id, status FROM evaluations WHERE id = ? FOR UPDATE")
+            : $pdo->prepare("SELECT id, status FROM evaluations WHERE evaluator_id = ? AND evaluatee_id = ? AND cycle_id = ? FOR UPDATE");
+        $stmt->execute($isAdminUpdate ? [$adminEvaluationId] : [$evaluator_id, $evaluatee_id, $cycle_id]);
         $eval = $stmt->fetch();
+        if ($isAdminUpdate && !$eval) throw new RuntimeException('ไม่พบผลการประเมินที่ต้องการแก้ไข');
 
-        $status = ($action === 'submit') ? 'submitted' : 'draft';
+        $status = $isAdminUpdate ? (string)$adminEvaluation['status'] : (($action === 'submit') ? 'submitted' : 'draft');
 
         if ($eval) {
-            if ($eval['status'] === 'acknowledged') {
+            if ($eval['status'] === 'acknowledged' && !$isAdminUpdate) {
                 throw new Exception("รับทราบผลแล้ว ไม่สามารถแก้ไขได้");
             }
             $eval_id = $eval['id'];
@@ -135,11 +151,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Log action
         $stmt = $pdo->prepare("INSERT INTO evaluation_logs (evaluation_id, user_id, action) VALUES (?, ?, ?)");
-        $stmt->execute([$eval_id, $evaluator_id, $action === 'submit' ? 'Submitted evaluation' : 'Saved draft']);
+        $logAction = $isAdminUpdate ? 'Administrator updated evaluation scores' : ($action === 'submit' ? 'Submitted evaluation' : 'Saved draft');
+        $stmt->execute([$eval_id, $actor_id, $logAction]);
 
         $pdo->commit();
         
-        header("Location: index.php?success=1");
+        header('Location: ' . ($isAdminUpdate ? 'report_detail.php?id=' . (int)$eval_id . '&updated=1' : 'index.php?success=1'));
         exit;
 
     } catch (Throwable $e) {

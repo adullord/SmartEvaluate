@@ -81,15 +81,19 @@ require_once 'includes/header.php';
                                 <?php if ($r['status'] === 'acknowledged'): ?>
                                     <span class="status-done" style="background:#10B981; color:white"><?= appIcon('check-circle') ?> รับทราบแล้ว</span>
                                 <?php elseif ($r['status'] === 'submitted'): ?>
-                                    <span class="status-done"><?= appIcon('edit') ?> รอรับทราบ</span>
+                                    <span class="status-done"><?= appIcon('check-circle') ?> ประเมินแล้ว</span>
                                 <?php else: ?>
                                     <span class="status-pending" style="color:#F59E0B"><?= appIcon('triangle-alert') ?> ฉบับร่าง</span>
                                 <?php endif; ?>
                             </td>
                             <td style="text-align:center;">
+                                <?php if ($user_role === 'admin'): ?>
+                                    <a href="assessment.php?evaluation_id=<?= (int)$r['id'] ?>" class="btn btn-primary" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('edit') ?> แก้ไขคะแนน</a>
+                                <?php endif; ?>
                                 <?php if ($user_role === 'admin' || (int)$r['evaluator_id'] === (int)$user_id): ?>
                                     <a href="export_excel.php?id=<?= $r['id'] ?>" class="btn btn-success" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('file-spreadsheet') ?> Excel</a>
-                                    <a href="export_pdf.php?id=<?= $r['id'] ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('file-text') ?> ดู/พิมพ์ PDF</a>
+                                    <a href="export_pdf.php?id=<?= $r['id'] ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('file-text') ?> PDF สรุป</a>
+                                    <a href="export_assessment_pdf.php?id=<?= $r['id'] ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('clipboard-list') ?> PDF แบบประเมิน</a>
                                 <?php endif; ?>
                                 <a href="report_detail.php?id=<?= $r['id'] ?>" class="btn btn-secondary" style="padding: 0.45rem 1rem; font-size: 0.88rem;">
                                     <?= appIcon('eye') ?> ดูผล

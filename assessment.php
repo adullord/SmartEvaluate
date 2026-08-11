@@ -12,19 +12,37 @@ if (!in_array((string)($_SESSION['role'] ?? ''), ['admin','ss_amphoe','director'
     exit('ไม่มีสิทธิ์ประเมินบุคลากรอื่น');
 }
 
-$evaluator_id = $_SESSION['user_id'];
-$evaluatee_id = requestInt($_GET['evaluatee_id'] ?? null, 'evaluatee_id');
-$cycle_id = requestInt($_GET['cycle_id'] ?? null, 'cycle_id');
+$actor_id = (int)$_SESSION['user_id'];
+$is_admin = (string)($_SESSION['role'] ?? '') === 'admin';
+$admin_evaluation_id = $is_admin ? requestInt($_GET['evaluation_id'] ?? null, 'evaluation_id', 0, 0) : 0;
+$evaluator_id = $actor_id;
+$evaluatee_id = requestInt($_GET['evaluatee_id'] ?? null, 'evaluatee_id', 0, 0);
+$cycle_id = requestInt($_GET['cycle_id'] ?? null, 'cycle_id', 0, 0);
+
+if ($admin_evaluation_id > 0) {
+    $stmt = $pdo->prepare('SELECT id,evaluator_id,evaluatee_id,cycle_id FROM evaluations WHERE id=?');
+    $stmt->execute([$admin_evaluation_id]);
+    $adminEvaluation = $stmt->fetch();
+    if (!$adminEvaluation) {
+        http_response_code(404);
+        exit('ไม่พบผลการประเมินที่ต้องการแก้ไข');
+    }
+    $evaluator_id = (int)$adminEvaluation['evaluator_id'];
+    $evaluatee_id = (int)$adminEvaluation['evaluatee_id'];
+    $cycle_id = (int)$adminEvaluation['cycle_id'];
+}
 
 if (!$evaluatee_id || !$cycle_id) {
     die("ข้อมูลไม่ครบถ้วน");
 }
 
 // ตรวจสอบสิทธิ์ว่าได้รับมอบหมายให้ประเมินคนนี้ในรอบนี้จริงหรือไม่
-$stmt = $pdo->prepare("SELECT * FROM evaluator_mapping WHERE evaluator_id = ? AND evaluatee_id = ? AND cycle_id = ?");
-$stmt->execute([$evaluator_id, $evaluatee_id, $cycle_id]);
-if (!$stmt->fetch()) {
-    die("คุณไม่มีสิทธิ์ประเมินบุคลากรท่านนี้");
+if ($admin_evaluation_id === 0) {
+    $stmt = $pdo->prepare("SELECT evaluator_id FROM evaluator_mapping WHERE evaluatee_id = ? AND cycle_id = ? AND (? = 1 OR evaluator_id = ?) ORDER BY id LIMIT 1");
+    $stmt->execute([$evaluatee_id, $cycle_id, $is_admin ? 1 : 0, $evaluator_id]);
+    $mapping = $stmt->fetch();
+    if (!$mapping) die("คุณไม่มีสิทธิ์ประเมินบุคลากรท่านนี้");
+    if ($is_admin) $evaluator_id = (int)$mapping['evaluator_id'];
 }
 
 // ดึงข้อมูลผู้รับการประเมิน
@@ -127,13 +145,15 @@ foreach ($competencies as $comp) {
 }
 
 // ตรวจสอบว่าเคยประเมินหรือยัง (เพื่อโหมดแก้ไข)
-$stmt = $pdo->prepare("SELECT * FROM evaluations WHERE evaluator_id = ? AND evaluatee_id = ? AND cycle_id = ?");
-$stmt->execute([$evaluator_id, $evaluatee_id, $cycle_id]);
+$stmt = $admin_evaluation_id > 0
+    ? $pdo->prepare("SELECT * FROM evaluations WHERE id = ?")
+    : $pdo->prepare("SELECT * FROM evaluations WHERE evaluator_id = ? AND evaluatee_id = ? AND cycle_id = ?");
+$stmt->execute($admin_evaluation_id > 0 ? [$admin_evaluation_id] : [$evaluator_id, $evaluatee_id, $cycle_id]);
 $evaluation = $stmt->fetch();
 
 $existing_scores = [];
 if ($evaluation) {
-    if ($evaluation['status'] === 'acknowledged') {
+    if ($evaluation['status'] === 'acknowledged' && !$is_admin) {
         die("ผู้รับการประเมินรับทราบผลแล้ว ไม่สามารถแก้ไขได้");
     }
     
@@ -149,6 +169,13 @@ if ($evaluation) {
 
 require_once 'includes/header.php';
 ?>
+
+<?php if ($is_admin && $evaluation): ?>
+<div class="card" style="margin-bottom:1rem;border-left:4px solid #f59e0b;background:#fffbeb">
+    <strong><?= appIcon('triangle-alert') ?> โหมดผู้ดูแลระบบ</strong>
+    <p style="margin:.35rem 0 0;color:#78350f">คุณกำลังแก้ไขคะแนนแทนผู้ประเมิน ระบบจะคงผู้ประเมินและสถานะเดิม พร้อมบันทึกประวัติผู้แก้ไข</p>
+</div>
+<?php endif; ?>
 
 <div class="card" style="margin-bottom: 2rem;">
     <div class="evaluatee-info-grid">
@@ -171,6 +198,7 @@ require_once 'includes/header.php';
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="evaluatee_id" value="<?= $evaluatee_id ?>">
     <input type="hidden" name="cycle_id" value="<?= $cycle_id ?>">
+    <?php if ($is_admin && $evaluation): ?><input type="hidden" name="evaluation_id" value="<?= (int)$evaluation['id'] ?>"><?php endif; ?>
     
     <!-- Progress and Navigation Container -->
     <div class="card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
@@ -434,8 +462,12 @@ require_once 'includes/header.php';
                 </div>
                 
                 <div style="margin-top:2rem; text-align:center;">
-                    <button type="submit" name="action" value="draft" class="btn-draft" style="margin-right:1rem;"><?= appIcon('save') ?> บันทึกแบบร่าง</button>
-                    <button type="submit" name="action" value="submit" class="btn-submit-final" id="btnSubmitFinal"><?= appIcon('check-circle') ?> ยืนยันส่งผลการประเมิน</button>
+                    <?php if ($is_admin && $evaluation): ?>
+                        <button type="submit" name="action" value="admin_update" class="btn-submit-final" id="btnSubmitFinal"><?= appIcon('save') ?> บันทึกการแก้ไขคะแนน</button>
+                    <?php else: ?>
+                        <button type="submit" name="action" value="draft" class="btn-draft" style="margin-right:1rem;"><?= appIcon('save') ?> บันทึกแบบร่าง</button>
+                        <button type="submit" name="action" value="submit" class="btn-submit-final" id="btnSubmitFinal"><?= appIcon('check-circle') ?> ยืนยันส่งผลการประเมิน</button>
+                    <?php endif; ?>
                 </div>
             </div> <!-- End card -->
         </div> <!-- End tab-pane summary -->

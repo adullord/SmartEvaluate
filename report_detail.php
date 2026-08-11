@@ -129,6 +129,9 @@ $summary_total_weight = array_sum(array_column($comp_summaries, 'weight'));
 
 require_once 'includes/header.php';
 ?>
+<?php if ($_SESSION['role'] === 'admin' && ($_GET['updated'] ?? '') === '1'): ?>
+<div class="card" style="margin-bottom:1rem;padding:1rem;border-left:4px solid #10b981;background:#ecfdf5;color:#065f46"><?= appIcon('check-circle') ?> บันทึกการแก้ไขคะแนนและคำนวณคะแนนรวมใหม่เรียบร้อยแล้ว</div>
+<?php endif; ?>
 
 <div class="card" style="margin-bottom: 2rem;">
     <div class="evaluatee-info-grid">
@@ -150,15 +153,17 @@ require_once 'includes/header.php';
                     <?php if ($evaluation['status'] === 'acknowledged'): ?>
                         <span class="badge" style="background:#10B981; color:white; font-size: 1rem; padding: 0.5rem 1rem;"><?= appIcon('check-circle') ?> ผู้รับการประเมินรับทราบผลแล้ว เมื่อ <?= $evaluation['acknowledged_at'] ?></span>
                     <?php elseif ($evaluation['status'] === 'submitted'): ?>
-                        <span class="badge" style="background:#F59E0B; color:white; font-size: 1rem; padding: 0.5rem 1rem;"><?= appIcon('edit') ?> รอการรับทราบผล</span>
+                        <span class="badge" style="background:#10B981; color:white; font-size: 1rem; padding: 0.5rem 1rem;"><?= appIcon('check-circle') ?> ประเมินแล้ว</span>
                     <?php else: ?>
                         <span class="badge" style="background:#6B7280; color:white; font-size: 1rem; padding: 0.5rem 1rem;"><?= appIcon('triangle-alert') ?> ฉบับร่าง (ยังไม่ส่งผล)</span>
                     <?php endif; ?>
                 </div>
                 <?php if ($_SESSION['role'] === 'admin' || (int)$evaluation['evaluator_id'] === (int)$user_id): ?>
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <?php if ($_SESSION['role'] === 'admin'): ?><a href="assessment.php?evaluation_id=<?= $evaluation_id ?>" class="btn btn-primary" style="padding:0.5rem 1rem;"><?= appIcon('edit') ?> แก้ไขคะแนน</a><?php endif; ?>
                         <a href="export_excel.php?id=<?= $evaluation_id ?>" class="btn btn-success" style="padding: 0.5rem 1rem;"><?= appIcon('file-spreadsheet') ?> ส่งออก Excel</a>
-                        <a href="export_pdf.php?id=<?= $evaluation_id ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding: 0.5rem 1rem;"><?= appIcon('file-text') ?> ดู/พิมพ์ PDF</a>
+                        <a href="export_pdf.php?id=<?= $evaluation_id ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding: 0.5rem 1rem;"><?= appIcon('file-text') ?> PDF สรุป</a>
+                        <a href="export_assessment_pdf.php?id=<?= $evaluation_id ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding: 0.5rem 1rem;"><?= appIcon('clipboard-list') ?> PDF แบบประเมิน</a>
                     </div>
                 <?php endif; ?>
             </div>

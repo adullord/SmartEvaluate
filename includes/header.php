@@ -1,4 +1,17 @@
-<?php require_once __DIR__ . '/../csrf_helper.php'; ?>
+<?php
+require_once __DIR__ . '/../csrf_helper.php';
+$currentNavPath = (string)(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '');
+$navItemClass = static function ($paths) use ($currentNavPath): string {
+    foreach ((array)$paths as $path) {
+        if (rtrim($currentNavPath, '/') === rtrim(appUrl((string)$path), '/')) {
+            return 'nav-item active';
+        }
+    }
+    return 'nav-item';
+};
+$isAdminSection = strpos($currentNavPath, appUrl('admin/')) === 0
+    && rtrim($currentNavPath, '/') !== rtrim(appUrl('admin/database_schema.php'), '/');
+?>
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -32,34 +45,60 @@
                 </div>
 
                 <nav class="sidebar-nav-menu">
-                    <a href="<?= htmlspecialchars(appUrl('index.php')) ?>" class="nav-item">
-                        <span class="nav-icon"><?= appIcon('home') ?></span> <span class="nav-text">หน้าแรก</span>
-                    </a>
-                    <a href="<?= htmlspecialchars(appUrl('report.php')) ?>" class="nav-item">
-                        <span class="nav-icon"><?= appIcon('bar-chart') ?></span> <span class="nav-text">รายงานผล</span>
-                    </a>
-                    
-                    <a href="<?= htmlspecialchars(appUrl('kpi_results.php')) ?>" class="nav-item">
-                        <span class="nav-icon"><?= appIcon('activity') ?></span> <span class="nav-text">ตัวชี้วัดผลสัมฤทธิ์</span>
-                    </a>
-                    <?php if (in_array($_SESSION['role'] ?? '', ['admin', 'ss_amphoe', 'director'], true)): ?>
-                        <a href="<?= htmlspecialchars(appUrl('kpi_assignments.php')) ?>" class="nav-item">
-                            <span class="nav-icon"><?= appIcon('link') ?></span> <span class="nav-text">กำหนดผู้รับผิดชอบตัวชี้วัด</span>
+                    <div class="nav-section">
+                        <div class="nav-header">เมนูหลัก</div>
+                        <a href="<?= htmlspecialchars(appUrl('index.php')) ?>" class="<?= $navItemClass('index.php') ?>">
+                            <span class="nav-icon"><?= appIcon('home') ?></span> <span class="nav-text">หน้าแรก</span>
                         </a>
-                        <a href="<?= htmlspecialchars(appUrl('kpi_report.php')) ?>" class="nav-item">
-                            <span class="nav-icon"><?= appIcon('file-text') ?></span> <span class="nav-text">รายงานตัวชี้วัด</span>
+                    </div>
+
+                    <div class="nav-section">
+                        <div class="nav-header">องค์ประกอบที่ 1 สมรรถนะ</div>
+                        <?php if (in_array($_SESSION['role'] ?? '', ['admin', 'ss_amphoe', 'director'], true)): ?>
+                        <a href="<?= htmlspecialchars(appUrl('competency_assessments.php')) ?>" class="<?= $navItemClass(['competency_assessments.php', 'assessment.php']) ?>">
+                            <span class="nav-icon"><?= appIcon('users') ?></span> <span class="nav-text">รายชื่อผู้ที่ต้องประเมิน</span>
                         </a>
-                    <?php endif; ?>
+                        <?php endif; ?>
+                        <a href="<?= htmlspecialchars(appUrl('report.php')) ?>" class="<?= $navItemClass(['report.php', 'report_detail.php']) ?>">
+                            <span class="nav-icon"><?= appIcon('bar-chart') ?></span> <span class="nav-text">รายงานผลการประเมิน</span>
+                        </a>
+                    </div>
+
+                    <div class="nav-section">
+                        <div class="nav-header">องค์ประกอบที่ 2 ตัวชี้วัด</div>
+                        <a href="<?= htmlspecialchars(appUrl('kpi_results.php')) ?>" class="<?= $navItemClass('kpi_results.php') ?>">
+                            <span class="nav-icon"><?= appIcon('activity') ?></span> <span class="nav-text">บันทึกผลตัวชี้วัด</span>
+                        </a>
+                        <?php if (in_array($_SESSION['role'] ?? '', ['admin', 'ss_amphoe', 'director'], true)): ?>
+                            <a href="<?= htmlspecialchars(appUrl('kpi_assignments.php')) ?>" class="<?= $navItemClass('kpi_assignments.php') ?>">
+                                <span class="nav-icon"><?= appIcon('link') ?></span> <span class="nav-text">กำหนดผู้รับผิดชอบ</span>
+                            </a>
+                            <a href="<?= htmlspecialchars(appUrl('kpi_report.php')) ?>" class="<?= $navItemClass('kpi_report.php') ?>">
+                                <span class="nav-icon"><?= appIcon('file-text') ?></span> <span class="nav-text">รายงานตัวชี้วัด</span>
+                            </a>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="nav-section">
+                        <div class="nav-header">องค์ประกอบที่ 3 งานมอบหมายพิเศษ</div>
+                        <a href="<?= htmlspecialchars(appUrl('component3_assessment.php')) ?>" class="<?= $navItemClass(['component3_assessment.php', 'process_component3.php']) ?>">
+                            <span class="nav-icon"><?= appIcon('clipboard-check') ?></span> <span class="nav-text">ประเมินตนเอง</span>
+                        </a>
+                        <a href="<?= htmlspecialchars(appUrl('component3_report.php')) ?>" class="<?= $navItemClass(['component3_report.php', 'export_component3_pdf.php']) ?>">
+                            <span class="nav-icon"><?= appIcon('file-text') ?></span> <span class="nav-text">รายงานองค์ประกอบที่ 3</span>
+                        </a>
+                    </div>
 
                     <?php if ($_SESSION['role'] === 'admin'): ?>
-                        <div class="nav-divider"></div>
-                        <div class="nav-header">การจัดการระบบ</div>
-                        <a href="<?= htmlspecialchars(appUrl('admin/database_schema.php')) ?>" class="nav-item">
-                            <span class="nav-icon"><?= appIcon('settings') ?></span> <span class="nav-text">ปรับโครงสร้างฐานข้อมูล</span>
-                        </a>
-                        <a href="<?= htmlspecialchars(appUrl('admin/index.php')) ?>" class="nav-item">
-                            <span class="nav-icon"><?= appIcon('settings') ?></span> <span class="nav-text">เมนูผู้ดูแลระบบ</span>
-                        </a>
+                        <div class="nav-section nav-section-admin">
+                            <div class="nav-header">การจัดการระบบ</div>
+                            <a href="<?= htmlspecialchars(appUrl('admin/index.php')) ?>" class="<?= $isAdminSection ? 'nav-item active' : 'nav-item' ?>">
+                                <span class="nav-icon"><?= appIcon('settings') ?></span> <span class="nav-text">ศูนย์ผู้ดูแลระบบ</span>
+                            </a>
+                            <a href="<?= htmlspecialchars(appUrl('admin/database_schema.php')) ?>" class="<?= $navItemClass('admin/database_schema.php') ?>">
+                                <span class="nav-icon"><?= appIcon('database') ?></span> <span class="nav-text">ปรับโครงสร้างฐานข้อมูล</span>
+                            </a>
+                        </div>
                     <?php endif; ?>
                 </nav>
 

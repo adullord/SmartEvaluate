@@ -294,6 +294,20 @@ document.addEventListener('DOMContentLoaded', function() {
         form.addEventListener('submit', (e) => {
             const action = e.submitter ? e.submitter.value : 'draft';
             
+            if (action === 'admin_update') {
+                const totalQuestions = document.querySelectorAll('.question-item').length;
+                const answered = document.querySelectorAll('.matrix-radio:checked').length;
+                if (answered < totalQuestions) {
+                    e.preventDefault();
+                    alert(`กรุณากรอกคะแนนให้ครบทุกข้อ (${answered}/${totalQuestions} ข้อ)`);
+                    return;
+                }
+                if (!confirm('ยืนยันการแก้ไขคะแนนในฐานะผู้ดูแลระบบ? ระบบจะคำนวณคะแนนรวมใหม่และบันทึกประวัติการแก้ไข')) {
+                    e.preventDefault();
+                }
+                return;
+            }
+
             if (action === 'submit') {
                 const totalQuestions = document.querySelectorAll('.question-item').length;
                 const answered = document.querySelectorAll('.matrix-radio:checked').length;

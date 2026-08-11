@@ -6,10 +6,14 @@ function loadEvaluationExportData(PDO $pdo, int $evaluationId, int $userId, stri
         SELECT e.*, u.fullname AS evaluatee_name, u.expected_level, u.position_id,
                p.name AS pos_name, r.name AS rank_name, d.name AS dept_name,
                evaluator.fullname AS evaluator_name,
+               evaluator_position.name AS evaluator_pos_name,
+               evaluator_rank.name AS evaluator_rank_name,
                c.round_name, c.fiscal_year
         FROM evaluations e
         JOIN users u ON u.id = e.evaluatee_id
         JOIN users evaluator ON evaluator.id = e.evaluator_id
+        JOIN positions evaluator_position ON evaluator_position.id = evaluator.position_id
+        JOIN ranks evaluator_rank ON evaluator_rank.id = evaluator.rank_id
         JOIN positions p ON p.id = u.position_id
         JOIN ranks r ON r.id = u.rank_id
         JOIN departments d ON d.id = u.department_id
