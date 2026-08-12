@@ -89,6 +89,13 @@ $isAdminSection = strpos($currentNavPath, appUrl('admin/')) === 0
                         </a>
                     </div>
 
+                    <div class="nav-section">
+                        <div class="nav-header">รายงานสรุปผล</div>
+                        <a href="<?= htmlspecialchars(appUrl('performance_summary.php')) ?>" class="<?= $navItemClass(['performance_summary.php', 'export_performance_summary_pdf.php']) ?>">
+                            <span class="nav-icon"><?= appIcon('clipboard-list') ?></span> <span class="nav-text">สรุปผลการปฏิบัติราชการ</span>
+                        </a>
+                    </div>
+
                     <?php if ($_SESSION['role'] === 'admin'): ?>
                         <div class="nav-section nav-section-admin">
                             <div class="nav-header">การจัดการระบบ</div>
