@@ -8,7 +8,7 @@ function loadEvaluationExportData(PDO $pdo, int $evaluationId, int $userId, stri
                evaluator.fullname AS evaluator_name,
                evaluator_position.name AS evaluator_pos_name,
                evaluator_rank.name AS evaluator_rank_name,
-               c.round_name, c.fiscal_year
+               c.round_name, c.fiscal_year, c.start_date, c.end_date
         FROM evaluations e
         JOIN users u ON u.id = e.evaluatee_id
         JOIN users evaluator ON evaluator.id = e.evaluator_id

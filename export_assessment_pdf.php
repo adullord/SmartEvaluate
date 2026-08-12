@@ -2,6 +2,7 @@
 require_once 'config.php';
 require_once 'vendor/autoload.php';
 require_once 'report_export_data.php';
+require_once __DIR__ . '/includes/pdf_temp_helper.php';
 
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
@@ -62,13 +63,17 @@ try {
     }
     unset($competency);
 
-    preg_match('/รอบ(?:ที่)?\s*(\d+)/u', (string)$evaluation['round_name'], $roundMatch);
-    $roundNumber = (int)($roundMatch[1] ?? 1);
-    $roundDate = $roundNumber === 2 ? '1 ตุลาคม' : '1 เมษายน';
-    $roundDisplay = 'รอบที่ ' . $roundNumber . ' ' . $roundDate . ' ' . $evaluation['fiscal_year'];
+    preg_match('/(\d+)/u', (string)$evaluation['round_name'], $roundMatch);
+    $roundNumber = (int)($roundMatch[1] ?? 0);
+    if (!in_array($roundNumber, [1, 2], true)) {
+        $roundNumber = (int)date('n', strtotime((string)$evaluation['start_date'])) === 4 ? 2 : 1;
+    }
+    $roundDisplay = 'รอบที่ ' . $roundNumber;
     $acknowledged = $evaluation['acknowledged_at']
         ? date('d/m/Y', strtotime($evaluation['acknowledged_at']))
         : '................................';
+    $evaluateePosition = trim((string)$evaluation['pos_name']) . trim((string)$evaluation['rank_name']);
+    $evaluatorPosition = trim((string)$evaluation['evaluator_pos_name']) . trim((string)$evaluation['evaluator_rank_name']);
 
     $coreCompetencies = array_values(array_filter($competencies, fn($item) => $item['type'] === 'core'));
     $functionalCompetencies = array_values(array_filter($competencies, fn($item) => $item['type'] === 'functional'));
@@ -135,8 +140,8 @@ try {
     foreach ($detailGroups as $groupIndex => $group) {
         $html .= '<pagebreak /><section class="detail-page"><div class="detail-header">แบบบันทึกพฤติกรรมที่แสดงออกต่อพฤติกรรมที่จำเป็นสำหรับการปฏิบัติงาน</div>'
             . '<table class="person-lines"><colgroup><col style="width:34%"><col style="width:32%"><col style="width:34%"></colgroup>'
-            . '<tr><td>ชื่อผู้รับการประเมิน ' . $h($evaluation['evaluatee_name']) . '</td><td>ตำแหน่ง ' . $h($evaluation['pos_name']) . '</td><td>' . $h($evaluation['rank_name']) . '</td></tr>'
-            . '<tr><td>ชื่อผู้ประเมิน ' . $h($evaluation['evaluator_name']) . '</td><td>ตำแหน่ง ' . $h($evaluation['evaluator_pos_name']) . '</td><td>' . $h($evaluation['evaluator_rank_name']) . '</td></tr></table>';
+            . '<tr><td>ชื่อผู้รับการประเมิน ' . $h($evaluation['evaluatee_name']) . '</td><td colspan="2">ตำแหน่ง ' . $h($evaluateePosition) . '</td></tr>'
+            . '<tr><td>ชื่อผู้ประเมิน ' . $h($evaluation['evaluator_name']) . '</td><td colspan="2">ตำแหน่ง ' . $h($evaluatorPosition) . '</td></tr></table>';
 
         foreach ($group as $competency) {
             $indicators = $competency['indicators'];
@@ -175,10 +180,7 @@ try {
     foreach (['THSarabun.ttf', 'THSarabun Bold.ttf', 'THSarabun Italic.ttf', 'THSarabun BoldItalic.ttf'] as $fontFile) {
         if (!is_file($fontDir . '/' . $fontFile)) throw new RuntimeException('ไม่พบไฟล์ฟอนต์ TH Sarabun PSK: ' . $fontFile);
     }
-    $tempDir = __DIR__ . '/tmp/mpdf';
-    if (!is_dir($tempDir) && !mkdir($tempDir, 0777, true) && !is_dir($tempDir)) {
-        throw new RuntimeException('ไม่สามารถสร้างพื้นที่ชั่วคราวสำหรับ PDF ได้');
-    }
+    $tempDir = appMpdfTempDir();
     $mpdf = new Mpdf([
         'mode' => 'utf-8',
         'format' => 'A4-L',
@@ -200,7 +202,7 @@ try {
         exit;
     }
     header('Content-Type: application/pdf');
-    header("Content-Disposition: inline; filename=\"assessment_form.pdf\"; filename*=UTF-8''" . rawurlencode($filename));
+    header("Content-Disposition: attachment; filename=\"assessment_form.pdf\"; filename*=UTF-8''" . rawurlencode($filename));
     header('Content-Length: ' . strlen($pdfContent));
     echo $pdfContent;
     exit;

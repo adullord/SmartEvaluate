@@ -92,8 +92,8 @@ require_once 'includes/header.php';
                                 <?php endif; ?>
                                 <?php if ($user_role === 'admin' || (int)$r['evaluator_id'] === (int)$user_id): ?>
                                     <a href="export_excel.php?id=<?= $r['id'] ?>" class="btn btn-success" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('file-spreadsheet') ?> Excel</a>
-                                    <a href="export_pdf.php?id=<?= $r['id'] ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('file-text') ?> PDF สรุป</a>
-                                    <a href="export_assessment_pdf.php?id=<?= $r['id'] ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('clipboard-list') ?> PDF แบบประเมิน</a>
+                                    <a href="export_pdf.php?id=<?= $r['id'] ?>" class="btn btn-danger" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('download') ?> PDF สรุป</a>
+                                    <a href="export_assessment_pdf.php?id=<?= $r['id'] ?>" class="btn btn-danger" style="padding:0.45rem 0.7rem;font-size:0.84rem;margin:0.15rem;"><?= appIcon('download') ?> PDF แบบประเมิน</a>
                                 <?php endif; ?>
                                 <a href="report_detail.php?id=<?= $r['id'] ?>" class="btn btn-secondary" style="padding: 0.45rem 1rem; font-size: 0.88rem;">
                                     <?= appIcon('eye') ?> ดูผล

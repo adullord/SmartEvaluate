@@ -162,8 +162,8 @@ require_once 'includes/header.php';
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
                         <?php if ($_SESSION['role'] === 'admin'): ?><a href="assessment.php?evaluation_id=<?= $evaluation_id ?>" class="btn btn-primary" style="padding:0.5rem 1rem;"><?= appIcon('edit') ?> แก้ไขคะแนน</a><?php endif; ?>
                         <a href="export_excel.php?id=<?= $evaluation_id ?>" class="btn btn-success" style="padding: 0.5rem 1rem;"><?= appIcon('file-spreadsheet') ?> ส่งออก Excel</a>
-                        <a href="export_pdf.php?id=<?= $evaluation_id ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding: 0.5rem 1rem;"><?= appIcon('file-text') ?> PDF สรุป</a>
-                        <a href="export_assessment_pdf.php?id=<?= $evaluation_id ?>" target="_blank" rel="noopener" class="btn btn-danger" style="padding: 0.5rem 1rem;"><?= appIcon('clipboard-list') ?> PDF แบบประเมิน</a>
+                        <a href="export_pdf.php?id=<?= $evaluation_id ?>" class="btn btn-danger" style="padding: 0.5rem 1rem;"><?= appIcon('download') ?> PDF สรุป</a>
+                        <a href="export_assessment_pdf.php?id=<?= $evaluation_id ?>" class="btn btn-danger" style="padding: 0.5rem 1rem;"><?= appIcon('download') ?> PDF แบบประเมิน</a>
                     </div>
                 <?php endif; ?>
             </div>

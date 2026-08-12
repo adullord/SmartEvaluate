@@ -9,6 +9,14 @@ $cycleId=(int)($activeCycle['id']??0);
 $competency=['total'=>0,'done'=>0,'own_status'=>null,'own_score'=>null];
 $kpi=['total'=>0,'completed'=>0];
 $component3=['status'=>null,'score'=>null];
+$tableExists = static function(PDO $pdo, string $table): bool {
+    $stmt=$pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?');
+    $stmt->execute([$table]);
+    return (bool)$stmt->fetchColumn();
+};
+$hasKpiSchema=$tableExists($pdo,'kpi_indicators') && $tableExists($pdo,'kpi_assignments') && $tableExists($pdo,'kpi_results');
+$hasComponent3Schema=$tableExists($pdo,'component3_assessments');
+$schemaMissing=!$hasKpiSchema || !$hasComponent3Schema;
 
 if($activeCycle){
     if(in_array($role,['admin','ss_amphoe','director'],true)){
@@ -18,14 +26,16 @@ if($activeCycle){
     $stmt=$pdo->prepare("SELECT status,total_score_base100 FROM evaluations WHERE cycle_id=? AND evaluatee_id=? AND status IN ('submitted','acknowledged') ORDER BY id DESC LIMIT 1");
     $stmt->execute([$cycleId,$userId]); if($row=$stmt->fetch()){ $competency['own_status']=$row['status']; $competency['own_score']=$row['total_score_base100']; }
 
-    if($role==='admin'){
+    if($hasKpiSchema && $role==='admin'){
         $stmt=$pdo->prepare('SELECT COUNT(*) FROM kpi_indicators WHERE cycle_id=? AND is_active=1'); $stmt->execute([$cycleId]); $kpi['total']=(int)$stmt->fetchColumn();
         $stmt=$pdo->prepare('SELECT COUNT(*) FROM kpi_results r JOIN kpi_indicators i ON i.id=r.indicator_id WHERE i.cycle_id=?'); $stmt->execute([$cycleId]); $kpi['completed']=(int)$stmt->fetchColumn();
-    }else{
+    }elseif($hasKpiSchema){
         $stmt=$pdo->prepare('SELECT COUNT(DISTINCT a.indicator_id) FROM kpi_assignments a JOIN kpi_indicators i ON i.id=a.indicator_id WHERE a.user_id=? AND i.cycle_id=? AND i.is_active=1'); $stmt->execute([$userId,$cycleId]); $kpi['total']=(int)$stmt->fetchColumn();
         $stmt=$pdo->prepare('SELECT COUNT(DISTINCT r.indicator_id) FROM kpi_assignments a JOIN kpi_indicators i ON i.id=a.indicator_id JOIN users u ON u.id=a.user_id JOIN kpi_results r ON r.indicator_id=i.id AND r.department_id=u.department_id WHERE a.user_id=? AND i.cycle_id=?'); $stmt->execute([$userId,$cycleId]); $kpi['completed']=(int)$stmt->fetchColumn();
     }
-    $stmt=$pdo->prepare('SELECT status,final_score FROM component3_assessments WHERE cycle_id=? AND user_id=? LIMIT 1'); $stmt->execute([$cycleId,$userId]); if($row=$stmt->fetch()){ $component3['status']=$row['status']; $component3['score']=$row['final_score']; }
+    if($hasComponent3Schema){
+        $stmt=$pdo->prepare('SELECT status,final_score FROM component3_assessments WHERE cycle_id=? AND user_id=? LIMIT 1'); $stmt->execute([$cycleId,$userId]); if($row=$stmt->fetch()){ $component3['status']=$row['status']; $component3['score']=$row['final_score']; }
+    }
 }
 
 require_once 'includes/header.php';
@@ -33,6 +43,7 @@ require_once 'includes/header.php';
 <section class="dashboard-hero"><div><p class="dashboard-eyebrow">Smart Evaluate</p><h1>สวัสดี <?= htmlspecialchars($_SESSION['fullname']) ?></h1><p><?= $activeCycle?'ภาพรวมการประเมิน '.htmlspecialchars(component3CycleLabel($activeCycle)):'ขณะนี้ยังไม่มีรอบการประเมินที่เปิดใช้งาน' ?></p></div><span class="dashboard-hero-icon"><?= appIcon('bar-chart') ?></span></section>
 
 <?php if(!$activeCycle): ?><div class="alert alert-warning"><?= appIcon('triangle-alert') ?> กรุณาติดต่อผู้ดูแลระบบเพื่อเปิดรอบการประเมิน</div><?php else: ?>
+<?php if($schemaMissing): ?><div class="alert alert-warning"><?= appIcon('database') ?> โครงสร้างฐานข้อมูลยังไม่ครบ กรุณา<?= $role==='admin'?'<a href="'.htmlspecialchars(appUrl('admin/database_schema.php')).'"><strong>ปรับโครงสร้างฐานข้อมูล</strong></a>':'ติดต่อผู้ดูแลระบบ' ?></div><?php endif; ?>
 <div class="dashboard-overview">
   <article class="card dashboard-component component-one"><div class="dashboard-card-top"><span class="dashboard-component-icon"><?= appIcon('clipboard-list') ?></span><span class="dashboard-number">01</span></div><h2>สมรรถนะ</h2><p>องค์ประกอบที่ 1</p><?php if(in_array($role,['admin','ss_amphoe','director'],true)): ?><div class="dashboard-metrics"><span><b><?= $competency['done'] ?></b>ประเมินแล้ว</span><span><b><?= max(0,$competency['total']-$competency['done']) ?></b>รอดำเนินการ</span></div><a class="btn btn-primary" href="<?= htmlspecialchars(appUrl('competency_assessments.php')) ?>">รายชื่อผู้ที่ต้องประเมิน</a><?php else: ?><div class="dashboard-own-status"><small>ผลของฉัน</small><strong><?= $competency['own_score']!==null?number_format((float)$competency['own_score'],2):'-' ?></strong><span><?= $competency['own_status']?'ประเมินแล้ว':'ยังไม่มีผลประเมิน' ?></span></div><a class="btn btn-secondary" href="<?= htmlspecialchars(appUrl('report.php')) ?>">ดูผลการประเมิน</a><?php endif; ?></article>
   <article class="card dashboard-component component-two"><div class="dashboard-card-top"><span class="dashboard-component-icon"><?= appIcon('activity') ?></span><span class="dashboard-number">02</span></div><h2>ตัวชี้วัด</h2><p>องค์ประกอบที่ 2</p><div class="dashboard-metrics"><span><b><?= $kpi['total'] ?></b><?= $role==='admin'?'ตัวชี้วัดทั้งหมด':'ที่รับผิดชอบ' ?></span><span><b><?= $kpi['completed'] ?></b>บันทึกผลแล้ว</span></div><a class="btn btn-primary" href="<?= htmlspecialchars(appUrl('kpi_results.php')) ?>">ไปยังตัวชี้วัด</a></article>

@@ -2,6 +2,7 @@
 require_once 'config.php';
 require_once 'vendor/autoload.php';
 require_once 'report_export_data.php';
+require_once __DIR__ . '/includes/pdf_temp_helper.php';
 
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
@@ -57,10 +58,12 @@ try {
     $acknowledged = $evaluation['acknowledged_at']
         ? date('d/m/Y', strtotime($evaluation['acknowledged_at']))
         : '................................';
-    preg_match('/รอบ(?:ที่)?\s*(\d+)/u', (string)$evaluation['round_name'], $roundMatch);
-    $roundNumber = (int)($roundMatch[1] ?? 1);
-    $roundDate = $roundNumber === 2 ? '1 ตุลาคม' : '1 เมษายน';
-    $roundDisplay = 'รอบที่ ' . $roundNumber . ' ' . $roundDate . ' ' . $evaluation['fiscal_year'];
+    preg_match('/(\d+)/u', (string)$evaluation['round_name'], $roundMatch);
+    $roundNumber = (int)($roundMatch[1] ?? 0);
+    if (!in_array($roundNumber, [1, 2], true)) {
+        $roundNumber = (int)date('n', strtotime((string)$evaluation['start_date'])) === 4 ? 2 : 1;
+    }
+    $roundDisplay = 'รอบที่ ' . $roundNumber;
     $html = '<!doctype html><html lang="th"><head><meta charset="utf-8"><style>
         @page{margin:5mm} body{font-family:thsarabunpsk;font-size:16pt;color:#111;margin:0;line-height:1}
         table{border-collapse:collapse;table-layout:fixed;width:100%}.top{margin-bottom:1.2mm}.top td{padding:0.7mm 1.1mm;vertical-align:middle;line-height:1.05}
@@ -97,8 +100,7 @@ try {
             throw new RuntimeException('ไม่พบไฟล์ฟอนต์ TH Sarabun PSK: ' . $fontFile);
         }
     }
-    $tempDir = __DIR__ . '/tmp/mpdf';
-    if (!is_dir($tempDir)) mkdir($tempDir, 0777, true);
+    $tempDir = appMpdfTempDir();
     $mpdf = new Mpdf([
         'mode' => 'utf-8', 'format' => 'A4-L', 'tempDir' => $tempDir,
         'fontDir' => array_merge($defaultConfig['fontDir'], [$fontDir]),
@@ -111,7 +113,7 @@ try {
     $mpdf->SetTitle('สรุปผลการประเมิน - ' . $evaluation['evaluatee_name']);
     $mpdf->WriteHTML($html);
     $filename = 'สรุปประเมิน_' . safeReportFilename($evaluation['evaluatee_name']) . '.pdf';
-    // เปิดในตัวดู PDF ของเบราว์เซอร์ เพื่อให้ผู้ใช้กดพิมพ์หรือดาวน์โหลดได้
+    // สร้างในหน่วยความจำแล้วส่งให้เบราว์เซอร์ดาวน์โหลด ไม่บันทึกไฟล์รายงานบนเซิร์ฟเวอร์
     $pdfContent = $mpdf->Output('', Destination::STRING_RETURN);
     $qaOutputPath = PHP_SAPI === 'cli' ? getenv('EVALUATION_PDF_OUTPUT') : false;
     if ($qaOutputPath) {
@@ -119,7 +121,7 @@ try {
         exit;
     }
     header('Content-Type: application/pdf');
-    header("Content-Disposition: inline; filename=\"evaluation_report.pdf\"; filename*=UTF-8''" . rawurlencode($filename));
+    header("Content-Disposition: attachment; filename=\"evaluation_report.pdf\"; filename*=UTF-8''" . rawurlencode($filename));
     header('Content-Length: ' . strlen($pdfContent));
     echo $pdfContent;
     exit;
