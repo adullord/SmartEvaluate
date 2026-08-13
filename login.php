@@ -15,7 +15,7 @@ $error = '';
 $username = '';
 $csrfToken = generate_csrf_token();
 $now = time();
-$attemptWindow = 15 * 60;
+$attemptWindow = 5 * 60;
 $maxAttempts = 5;
 
 // เก็บเฉพาะความพยายามที่ล้มเหลวในช่วง 15 นาทีล่าสุด
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="เข้าสู่ระบบประเมินสมรรถนะบุคลากรสาธารณสุข">
+    <meta name="description" content="เข้าสู่รระบบประเมินผลการปฏิบัติราชการ">
     <title>เข้าสู่ระบบ — Smart Evaluate</title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="icon" type="image/svg+xml" href="<?= htmlspecialchars(appUrl('assets/images/favicon.svg')) ?>">
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="login-icon" aria-hidden="true"><?= appIcon('bar-chart') ?></div>
             <p class="login-eyebrow">Smart Evaluate</p>
             <h1 id="login-title">เข้าสู่ระบบ</h1>
-            <p>ระบบประเมินสมรรถนะ</p>
+            <p>ระบบประเมินผลการปฏิบัติราชการ</p>
         </div>
 
         <?php if ($error): ?>

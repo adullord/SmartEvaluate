@@ -17,8 +17,8 @@ $isAdminSection = strpos($currentNavPath, appUrl('admin/')) === 0
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="ระบบประเมินผลการปฏิบัติงานออนไลน์ Smart Evaluate">
-    <title>ระบบประเมินสมรรถนะบุคลากรสาธารณสุข</title>
+    <meta name="description" content="ระบบประเมินผลการปฏิบัติราชการ Smart Evaluate">
+    <title>ระบบประเมินผลการปฏิบัติราชการ</title>
     <link rel="stylesheet" href="<?= htmlspecialchars(appUrl('assets/css/style.css')) ?>?v=<?= time() ?>">
     <link rel="icon" type="image/svg+xml" href="<?= htmlspecialchars(appUrl('assets/images/favicon.svg')) ?>">
 </head>
@@ -28,7 +28,7 @@ $isAdminSection = strpos($currentNavPath, appUrl('admin/')) === 0
         <aside class="global-sidebar" id="globalSidebar">
             <div class="sidebar-brand">
                 <span class="brand-icon"><?= appIcon('bar-chart') ?></span>
-                <span class="brand-text">ระบบประเมินสมรรถนะ<br><small>บุคลากรสาธารณสุข</small></span>
+                <span class="brand-text">ระบบประเมินผล<br><small>การปฏิบัติราชการ</small></span>
             </div>
 
             <?php if (isset($_SESSION['user_id'])): ?>
