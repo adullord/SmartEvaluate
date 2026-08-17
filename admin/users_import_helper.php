@@ -99,6 +99,7 @@ function importUsersFromSpreadsheet(PDO $pdo, array $file): array
         'staff' => 'staff', 'บุคลากร' => 'staff',
         'director' => 'director', 'ผอ.รพ.สต.' => 'director', 'ผู้อำนวยการ รพ.สต.' => 'director',
         'ss_amphoe' => 'ss_amphoe', 'สสอ.' => 'ss_amphoe', 'สาธารณสุขอำเภอ' => 'ss_amphoe',
+        'sso_assistant' => 'sso_assistant', 'ผู้ช่วย สสอ.' => 'sso_assistant', 'ผู้ช่วยสสอ.' => 'sso_assistant',
     ];
     $activeAliases = [
         '1' => 1, 'ใช้งาน' => 1, 'active' => 1,

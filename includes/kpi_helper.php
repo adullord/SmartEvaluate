@@ -65,6 +65,35 @@ function kpiEligibleUsers(PDO $pdo, int $managerId, string $role): array
     return $stmt->fetchAll();
 }
 
+/** Primary assignees use the normal scope; directors may choose themselves or staff in their own RPST. */
+function kpiEligiblePrimaryUsers(PDO $pdo, int $managerId, string $role): array
+{
+    if ($role !== 'director') return kpiEligibleUsers($pdo, $managerId, $role);
+
+    $stmt = $pdo->prepare(
+        "SELECT u.id,u.fullname,u.role,d.short_name,d.type
+         FROM users manager
+         JOIN users u ON u.department_id=manager.department_id
+         JOIN departments d ON d.id=u.department_id
+         WHERE manager.id=? AND manager.is_active=1 AND manager.role='director'
+           AND u.is_active=1 AND u.role IN ('director','staff') AND d.type='RPST'
+         ORDER BY FIELD(u.role,'director','staff'),u.fullname"
+    );
+    $stmt->execute([$managerId]);
+    return $stmt->fetchAll();
+}
+
+function kpiAssigneeRoleLabel(string $role): string
+{
+    return match ($role) {
+        'director' => 'ผอ.รพ.สต.',
+        'ss_amphoe' => 'สสอ.',
+        'sso_assistant' => 'ผู้ช่วย สสอ.',
+        'admin' => 'แอดมิน',
+        default => 'บุคลากร',
+    };
+}
+
 function kpiEnsureDirectorAssignments(PDO $pdo): void
 {
     $pdo->exec(
@@ -74,6 +103,14 @@ function kpiEnsureDirectorAssignments(PDO $pdo): void
          JOIN users u
          JOIN departments d ON d.id=u.department_id
          WHERE k.is_active=1 AND u.is_active=1 AND u.role='director' AND d.type='RPST'"
+    );
+    $pdo->exec(
+        "INSERT IGNORE INTO kpi_assignments (indicator_id,user_id,responsibility_type,assigned_by)
+         SELECT k.id,u.id,'primary',u.id
+         FROM kpi_indicators k
+         JOIN users u
+         JOIN departments d ON d.id=u.department_id
+         WHERE k.is_active=1 AND u.is_active=1 AND u.role='sso_assistant' AND d.type='SSO'"
     );
 }
 

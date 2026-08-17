@@ -1,6 +1,7 @@
 <?php
 require_once 'config.php';
 require_once __DIR__.'/includes/component3_helper.php';
+require_once __DIR__.'/includes/kpi_helper.php';
 if (!isset($_SESSION['user_id'])) { header('Location: '.appUrl('login.php')); exit; }
 
 $userId=(int)$_SESSION['user_id']; $role=(string)$_SESSION['role'];
@@ -17,6 +18,7 @@ $tableExists = static function(PDO $pdo, string $table): bool {
 $hasKpiSchema=$tableExists($pdo,'kpi_indicators') && $tableExists($pdo,'kpi_assignments') && $tableExists($pdo,'kpi_results');
 $hasComponent3Schema=$tableExists($pdo,'component3_assessments');
 $schemaMissing=!$hasKpiSchema || !$hasComponent3Schema;
+if ($hasKpiSchema) kpiEnsureDirectorAssignments($pdo);
 
 if($activeCycle){
     if(in_array($role,['admin','ss_amphoe','director'],true)){

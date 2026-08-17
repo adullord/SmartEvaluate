@@ -36,11 +36,8 @@ $isAdminSection = strpos($currentNavPath, appUrl('admin/')) === 0
                     <div class="user-avatar"><?= appIcon('user-round') ?></div>
                     <div class="user-info">
                         <div class="user-name"><?= htmlspecialchars($_SESSION['fullname']) ?></div>
-                        <?php if($_SESSION['role'] === 'admin'): ?>
-                            <div class="user-role">ผู้ดูแลระบบ (Admin)</div>
-                        <?php else: ?>
-                            <div class="user-role">ผู้ใช้งานระบบ</div>
-                        <?php endif; ?>
+                        <?php $sidebarRoleLabels = ['admin'=>'ผู้ดูแลระบบ (Admin)','ss_amphoe'=>'สสอ.','sso_assistant'=>'ผู้ช่วย สสอ.','director'=>'ผอ.รพ.สต.','staff'=>'บุคลากร']; ?>
+                        <div class="user-role"><?= htmlspecialchars($sidebarRoleLabels[$_SESSION['role'] ?? 'staff'] ?? 'ผู้ใช้งานระบบ') ?></div>
                     </div>
                 </div>
 
@@ -73,6 +70,8 @@ $isAdminSection = strpos($currentNavPath, appUrl('admin/')) === 0
                             <a href="<?= htmlspecialchars(appUrl('kpi_assignments.php')) ?>" class="<?= $navItemClass('kpi_assignments.php') ?>">
                                 <span class="nav-icon"><?= appIcon('link') ?></span> <span class="nav-text">กำหนดผู้รับผิดชอบ</span>
                             </a>
+                        <?php endif; ?>
+                        <?php if (in_array($_SESSION['role'] ?? '', ['admin', 'ss_amphoe', 'sso_assistant', 'director'], true)): ?>
                             <a href="<?= htmlspecialchars(appUrl('kpi_report.php')) ?>" class="<?= $navItemClass('kpi_report.php') ?>">
                                 <span class="nav-icon"><?= appIcon('file-text') ?></span> <span class="nav-text">รายงานตัวชี้วัด</span>
                             </a>

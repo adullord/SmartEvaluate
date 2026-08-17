@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim($_POST['username'] ?? '');
         $fullname = trim($_POST['fullname'] ?? '');
         $role = $_POST['role'] ?? 'staff';
-        if (strlen($username) < 4 || $fullname === '' || !in_array($role, ['admin','ss_amphoe','director','staff'], true)) {
+        if (strlen($username) < 4 || $fullname === '' || !in_array($role, ['admin','ss_amphoe','sso_assistant','director','staff'], true)) {
             $error = 'กรุณากรอกข้อมูลบุคลากรให้ครบถ้วน';
         } else {
             try {
@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rank_id = requestInt($_POST['rank_id'] ?? null, 'rank_id');
         $password = $_POST['password'] ?? '';
         
-        if (strlen($username) < 4 || strlen($username) > 13 || strlen($password) < 12 || strlen($password) > 255 || trim($fullname) === '' || !in_array($role, ['admin','ss_amphoe','director','staff'], true)) {
+        if (strlen($username) < 4 || strlen($username) > 13 || strlen($password) < 12 || strlen($password) > 255 || trim($fullname) === '' || !in_array($role, ['admin','ss_amphoe','sso_assistant','director','staff'], true)) {
             $error = 'ชื่อผู้ใช้ต้องยาว 4–13 ตัวอักษร และรหัสผ่านต้องยาว 12–255 ตัวอักษร';
         } else {
             // Check if username exists
@@ -377,6 +377,7 @@ require_once '../includes/header.php';
                     <option value="staff">บุคลากรทั่วไป (Staff)</option>
                     <option value="director">ผู้อำนวยการ รพ.สต. (Director)</option>
                     <option value="ss_amphoe">สาธารณสุขอำเภอ (SSO)</option>
+                    <option value="sso_assistant">ผู้ช่วย สสอ. (SSO Assistant)</option>
                     <option value="admin">บุคลากร + admin</option>
                 </select>
             </div>
@@ -424,7 +425,7 @@ require_once '../includes/header.php';
     <form method="post" class="admin-stack-form"><input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>"><input type="hidden" name="action" value="edit_user"><input type="hidden" name="target_id" id="edit_id">
       <label>ชื่อผู้ใช้</label><input class="form-control" type="text" name="username" id="edit_username" required minlength="4">
       <label>ชื่อ-นามสกุล</label><input class="form-control" type="text" name="fullname" id="edit_fullname" required>
-      <label>บทบาท</label><select class="form-control" name="role" id="edit_role"><option value="staff">บุคลากร</option><option value="director">ผอ.รพ.สต.</option><option value="ss_amphoe">สสอ.</option><option value="admin">บุคลากร + admin</option></select>
+      <label>บทบาท</label><select class="form-control" name="role" id="edit_role"><option value="staff">บุคลากร</option><option value="director">ผอ.รพ.สต.</option><option value="ss_amphoe">สสอ.</option><option value="sso_assistant">ผู้ช่วย สสอ.</option><option value="admin">บุคลากร + admin</option></select>
       <label>หน่วยบริการ</label><select class="form-control" name="department_id" id="edit_department"><?php foreach($departments as $d): ?><option value="<?= $d['id'] ?>"><?= htmlspecialchars(($d['service_code'] ? $d['service_code'] . ' - ' : '') . ($d['short_name'] ?: $d['name'])) ?></option><?php endforeach ?></select>
       <label>สายงาน/ตำแหน่ง</label><select class="form-control" name="position_id" id="edit_position" onchange="updateExpectedLevel('edit')"><?php foreach($positions as $p): ?><option value="<?= $p['id'] ?>" data-name="<?= htmlspecialchars($p['name']) ?>"><?= htmlspecialchars($p['name']) ?></option><?php endforeach ?></select>
       <label>ระดับตำแหน่ง</label><select class="form-control" name="rank_id" id="edit_rank" onchange="updateExpectedLevel('edit')"><?php foreach($ranks as $r): ?><option value="<?= $r['id'] ?>" data-name="<?= htmlspecialchars($r['name']) ?>"><?= htmlspecialchars($r['name']) ?></option><?php endforeach ?></select>

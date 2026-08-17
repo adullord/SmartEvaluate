@@ -70,7 +70,7 @@ CREATE TABLE `users` (
   `username` varchar(13) NOT NULL,
   `password` varchar(255) NOT NULL,
   `fullname` varchar(255) NOT NULL,
-  `role` enum('admin','ss_amphoe','director','staff') NOT NULL,
+  `role` enum('admin','ss_amphoe','sso_assistant','director','staff') NOT NULL,
   `department_id` int(11) NOT NULL,
   `position_id` int(11) NOT NULL,
   `rank_id` int(11) NOT NULL,
@@ -285,7 +285,7 @@ UNLOCK TABLES;
 
 LOCK TABLES `roles` WRITE;
 /*!40000 ALTER TABLE `roles` DISABLE KEYS */;
-INSERT INTO `roles` (`id`, `code`, `name`, `created_at`) VALUES (1,'ss_amphoe','สสอ.','2026-08-07 04:02:42'),(2,'director','ผอ.รพ.สต.','2026-08-07 04:02:42'),(3,'staff','บุคลากร','2026-08-07 04:02:42'),(4,'admin','admin','2026-08-07 04:02:42');
+INSERT INTO `roles` (`id`, `code`, `name`, `created_at`) VALUES (1,'ss_amphoe','สสอ.','2026-08-07 04:02:42'),(2,'director','ผอ.รพ.สต.','2026-08-07 04:02:42'),(3,'staff','บุคลากร','2026-08-07 04:02:42'),(4,'admin','admin','2026-08-07 04:02:42'),(5,'sso_assistant','ผู้ช่วย สสอ.','2026-08-17 00:00:00');
 /*!40000 ALTER TABLE `roles` ENABLE KEYS */;
 UNLOCK TABLES;
 

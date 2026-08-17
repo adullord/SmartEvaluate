@@ -9,7 +9,7 @@ if (!isset($_SESSION['user_id'])) {
 
 $userId = (int) $_SESSION['user_id'];
 $role = (string) ($_SESSION['role'] ?? 'staff');
-$reportRoles = ['admin', 'ss_amphoe', 'director'];
+$reportRoles = ['admin', 'ss_amphoe', 'sso_assistant', 'director'];
 if (!in_array($role, $reportRoles, true)) {
     http_response_code(403);
     die('ไม่มีสิทธิ์ดูรายงานตัวชี้วัด');

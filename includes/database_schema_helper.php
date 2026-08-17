@@ -24,7 +24,7 @@ function appDatabaseSchema(): array
             'columns' => ['code' => 'VARCHAR(30) DEFAULT NULL', 'name' => 'VARCHAR(100) DEFAULT NULL', 'created_at' => 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP'],
         ],
         'users' => [
-            'create' => "CREATE TABLE IF NOT EXISTS `users` (`id` INT NOT NULL AUTO_INCREMENT,`username` VARCHAR(13) NOT NULL,`password` VARCHAR(255) NOT NULL,`fullname` VARCHAR(255) NOT NULL,`role` ENUM('admin','ss_amphoe','director','staff') NOT NULL,`department_id` INT NOT NULL,`position_id` INT NOT NULL,`rank_id` INT NOT NULL,`expected_level` INT DEFAULT 1,`is_active` TINYINT(1) DEFAULT 1,`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY (`id`),UNIQUE KEY `username` (`username`),KEY `department_id` (`department_id`),KEY `position_id` (`position_id`),KEY `rank_id` (`rank_id`),CONSTRAINT `users_ibfk_1` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`),CONSTRAINT `users_ibfk_2` FOREIGN KEY (`position_id`) REFERENCES `positions` (`id`),CONSTRAINT `users_ibfk_3` FOREIGN KEY (`rank_id`) REFERENCES `ranks` (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            'create' => "CREATE TABLE IF NOT EXISTS `users` (`id` INT NOT NULL AUTO_INCREMENT,`username` VARCHAR(13) NOT NULL,`password` VARCHAR(255) NOT NULL,`fullname` VARCHAR(255) NOT NULL,`role` ENUM('admin','ss_amphoe','sso_assistant','director','staff') NOT NULL,`department_id` INT NOT NULL,`position_id` INT NOT NULL,`rank_id` INT NOT NULL,`expected_level` INT DEFAULT 1,`is_active` TINYINT(1) DEFAULT 1,`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY (`id`),UNIQUE KEY `username` (`username`),KEY `department_id` (`department_id`),KEY `position_id` (`position_id`),KEY `rank_id` (`rank_id`),CONSTRAINT `users_ibfk_1` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`),CONSTRAINT `users_ibfk_2` FOREIGN KEY (`position_id`) REFERENCES `positions` (`id`),CONSTRAINT `users_ibfk_3` FOREIGN KEY (`rank_id`) REFERENCES `ranks` (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
             'columns' => ['expected_level' => 'INT DEFAULT 1', 'is_active' => 'TINYINT(1) DEFAULT 1'],
         ],
         'user_roles' => [
@@ -206,6 +206,21 @@ function applyAppDatabaseSchema(PDO $pdo, int $adminId): array
                 $pdo->exec('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $columnDefinition);
                 $actions[] = 'เพิ่มคอลัมน์ ' . $table . '.' . $column;
             }
+        }
+        $roleColumnType = (string)$pdo->query(
+            "SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'"
+        )->fetchColumn();
+        if ($roleColumnType !== '' && !str_contains($roleColumnType, "'sso_assistant'")) {
+            $pdo->exec("ALTER TABLE `users` MODIFY `role` ENUM('admin','ss_amphoe','sso_assistant','director','staff') NOT NULL");
+            $actions[] = 'เพิ่มบทบาทผู้ช่วย สสอ. ในตาราง users';
+        }
+
+        $roleExists = $pdo->prepare('SELECT COUNT(*) FROM roles WHERE code=?');
+        $roleExists->execute(['sso_assistant']);
+        if (!(int)$roleExists->fetchColumn()) {
+            $pdo->prepare('INSERT INTO roles (code,name) VALUES (?,?)')->execute(['sso_assistant', 'ผู้ช่วย สสอ.']);
+            $actions[] = 'เพิ่มบทบาทผู้ช่วย สสอ.';
         }
         if ($actions) {
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (migration_key,executed_by,summary) VALUES (?,?,?)');

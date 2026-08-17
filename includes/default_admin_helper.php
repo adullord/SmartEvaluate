@@ -17,8 +17,8 @@ function ensureDefaultAdmin(PDO $pdo, array $credentials = []): void
         "SELECT COLUMN_TYPE FROM information_schema.COLUMNS
          WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'"
     )->fetchColumn();
-    if ($roleType !== '' && !str_contains($roleType, "'admin'")) {
-        $pdo->exec("ALTER TABLE users MODIFY role ENUM('admin','ss_amphoe','director','staff') NOT NULL");
+    if ($roleType !== '' && !str_contains($roleType, "'sso_assistant'")) {
+        $pdo->exec("ALTER TABLE users MODIFY role ENUM('admin','ss_amphoe','sso_assistant','director','staff') NOT NULL");
     }
     if ((int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='admin'")->fetchColumn() > 0) return;
 
